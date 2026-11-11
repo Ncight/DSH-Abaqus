@@ -1,0 +1,45 @@
+{
+ "id": "c07_block_modes_and_explicit_push",
+ "title": "同一块体的模态分析与显式准静态压缩（弹塑性，平滑幅值）",
+ "tags": [
+  "模态",
+  "频率",
+  "显式",
+  "Explicit",
+  "塑性",
+  "平滑幅值",
+  "能量输出",
+  "C3D8R",
+  "沙漏控制"
+ ],
+ "keywords": [
+  "frequency",
+  "modal",
+  "explicit",
+  "plastic",
+  "smooth step",
+  "amplitude",
+  "energy",
+  "history output"
+ ],
+ "problem": "0.1 m × 0.1 m × 0.5 m 钢块底面固定：(1) 求前 6 阶固有频率；(2) 用 Abaqus/Explicit 在 0.01 s 内把顶面平滑压下 10 mm。",
+ "approach": [
+  "一个脚本里建两个模型，各导出一个 INP",
+  "模态：FrequencyStep(numEigen=6)，C3D8I",
+  "显式：C3D8R + ENHANCED 沙漏控制，SmoothStepAmplitude，场输出 20 帧，能量历程 100 点，双精度"
+ ],
+ "lessons": [
+  "方形截面的弯曲模态成对出现（1、2 阶频率相同），属正常",
+  "显式作业 2995 个增量步，稳定步长约 0.000002785 s，与\"最小单元尺寸/波速\"的估计一致",
+  "显式里 *Plastic 表与隐式相同：真应力—塑性应变，首行塑性应变为 0"
+ ],
+ "verified": {
+  "f1_Hz": 324.63,
+  "f3_Hz": 1415.1,
+  "explicit_increments": 2995
+ },
+ "files": [
+  "model.py"
+ ],
+ "source": "seed"
+}

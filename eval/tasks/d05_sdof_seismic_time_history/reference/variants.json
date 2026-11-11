@@ -1,0 +1,15 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "B23 columns, base acceleration = record x 9.8, stiffness-proportional damping on the columns, dt = 5 ms"},
+  {"name": "alpha_mass", "expect": "pass", "what": "mass-proportional damping on the point mass (acts on the absolute velocity when the base moves: +1.8 % displacement)"},
+  {"name": "fixed_base_force", "expect": "pass", "what": "fixed base, inertia force -m a_g(t) on the mass"},
+  {"name": "b21_columns", "expect": "pass", "what": "shear-flexible B21 columns: stiffness -0.7 %"},
+  {"name": "record_as_ms2", "expect": "fail", "fails": ["peak_relative_displacement", "peak_absolute_acceleration"], "what": "record in g used as m/s2"},
+  {"name": "first_column_only", "expect": "fail", "fails": ["peak_relative_displacement", "peak_absolute_acceleration"], "what": "only the first of the five values per line read"},
+  {"name": "dt_misread", "expect": "fail", "fails": ["peak_relative_displacement"], "what": "record time step taken as 0.02 s"},
+  {"name": "alpha_on_columns", "expect": "fail", "fails": ["peak_relative_displacement", "peak_absolute_acceleration"], "what": "mass-proportional damping on the massless column material: undamped response"},
+  {"name": "coarse_dt", "expect": "fail", "fails": ["output_interval"], "what": "time increment 50 ms"},
+  {"name": "flexible_beam", "expect": "fail", "fails": ["peak_relative_displacement"], "what": "beam as flexible as the columns"},
+  {"name": "absolute_reported", "expect": "fail", "fails": ["report_peak_relative_displacement_m"], "passes": ["peak_relative_displacement", "peak_absolute_acceleration"], "what": "correct ODB, absolute roof displacement reported"}
+ ]
+}

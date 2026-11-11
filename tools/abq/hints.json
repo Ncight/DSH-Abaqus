@@ -1,0 +1,190 @@
+[
+ {
+  "pattern": "Licensing error|unable to check ?out|license (server|feature).{0,60}(not|unavailable|failed|error)|FLEXnet Licensing error",
+  "hint": "许可证问题，不是模型问题：稍等后重试同一条命令；连续失败再报告用户。"
+ },
+ {
+  "pattern": "Non-ASCII character '\\\\xff'",
+  "hint": "脚本文件是 UTF-16 编码：PowerShell 的 > 重定向和 Out-File 默认写 UTF-16。用 write 工具写脚本文件，或改用 Set-Content -Encoding ascii。"
+ },
+ {
+  "pattern": "No module named '?odbAccess|No module named '?abaqus",
+  "hint": "odbAccess / abaqus 模块只在 Abaqus 自带的 Python 里有：把代码写成文件，用 abq python 文件名.py 运行（读 ODB）或 abq script 文件名.py（建模）。"
+ },
+ {
+  "pattern": "INITIAL VOID RATIO HAS NOT BEEN DEFINED",
+  "hint": "孔压单元必须给初始孔隙比：在 *Step 之前写 *Initial Conditions, type=RATIO，数据行是 节点集, 孔隙比（脚本接口 m.VoidsRatio）。固结分析的完整关键字见 skill abaqus-geotech。"
+ },
+ {
+  "pattern": "Unknown keyword|Illegal value \\\"[^\\\"]+\\\" for parameter|keyword is misplaced",
+  "hint": "关键字或参数值不对：脚本接口名不是关键字（例如接口 MohrCoulombPlasticity 对应 *Mohr Coulomb，孔隙比的初始条件是 type=RATIO）。用 abq examples --kw \"*关键字\" 找官方范例照着写，不要猜。"
+ },
+ {
+  "pattern": "DILATION ANGLE, PSI, SHOULD BE GREATER THAN ZERO",
+  "hint": "混凝土损伤塑性的膨胀角必须大于 0（常用 30～38 度），第一行依次是 膨胀角, 偏心率, fb0/fc0, K, 粘性系数。"
+ },
+ {
+  "pattern": "'\\w+' object has no attribute '(Tie|ContactProperty|SurfaceToSurfaceContact\\w*|StaticStep|\\w+Step|\\w+BC|\\w+Section|Pressure|ConcentratedForce|Gravity|Coupling|RigidBody)'",
+  "hint": "CAE 脚本缺模块导入：脚本开头要有 from abaqus import * / from abaqusConstants import * / from caeModules import *。"
+ },
+ {
+  "pattern": "keyword error on|unexpected keyword|got an unexpected keyword argument|takes (exactly|at least|at most) \\d+ arguments?",
+  "hint": "方法的参数名或个数不对。用 abq api <方法名> 查本机 Abaqus 2021 的真实签名（例如 2021 里 Tie/接触用 master=、slave=，不是 main/secondary）。"
+ },
+ {
+  "pattern": "TypeError: arg1;.{0,40}generator",
+  "hint": "CAE 脚本里内置 sum 被 Abaqus 的同名函数覆盖，不接受生成器：把 sum(x for x in …) 改成 sum([x for x in …]) 或 math.fsum(…)。"
+ },
+ {
+  "pattern": "is not JSON serializable",
+  "hint": "ODB 里取出的分量是 numpy.float32，json 不认：写文件前用 float(x) 转换，一组分量用 [float(x) for x in v.data]。（v.mises、v.magnitude、历程输出的数本身是普通 float。）"
+ },
+ {
+  "pattern": "Slice for an? .{0,20}Sequence\\s+is not supported",
+  "hint": "ODB 的 frames、values 这类序列不支持切片 a[1:]：改成下标循环 for i in range(1, len(seq)): x = seq[i]，或先 list(seq) 再切片；取最后一个可以直接用 [-1]。"
+ },
+ {
+  "pattern": "'FieldOutput' object has no attribute",
+  "hint": "FieldOutput 没有这个属性。可用的：values、locations[0].position、componentLabels、validInvariants、description、type；方法 getSubset(region=…, position=ELEMENT_NODAL)、getScalarField(invariant=MISES) / getScalarField(componentLabel='S11')。"
+ },
+ {
+  "pattern": "'FieldValue' object has no attribute",
+  "hint": "FieldValue（values 里的一项）没有这个属性。可用的：data、magnitude、mises、maxPrincipal、minPrincipal、nodeLabel、elementLabel、integrationPoint、position、instance。节点坐标：v.instance.getNodeFromLabel(v.nodeLabel).coordinates。"
+ },
+ {
+  "pattern": "'OdbMesh(Node|Element)Array' object has no attribute",
+  "hint": "inst.nodes / inst.elements 是数组，属性在每个成员上：for n in inst.nodes: n.label, n.coordinates；for e in inst.elements: e.label, e.connectivity, e.type。按编号取：inst.getNodeFromLabel(n)、inst.getElementFromLabel(n)。"
+ },
+ {
+  "pattern": "'Odb(Frame|Step)?' object has no attribute",
+  "hint": "属性名不对。OdbFrame：frameId、frameValue（分析步内时间）、incrementNumber、description、mode、frequency、fieldOutputs；OdbStep：name、procedure、frames、historyRegions、timePeriod、totalTime；Odb：name、steps、rootAssembly。"
+ },
+ {
+  "pattern": "'Odb(Instance|Assembly)' object has no attribute",
+  "hint": "实例/装配上的集合叫 nodeSets、elementSets、surfaces（没有 elemSets、sets）；节点是 nodes，单元是 elements，实例在 rootAssembly.instances 里。"
+ },
+ {
+  "pattern": "Non-ASCII character",
+  "hint": "脚本文件含非 ASCII 字符而没有编码声明，或被存成了 UTF-16（PowerShell 的 > 和 Out-File 默认如此）：用 write 工具写脚本，第一行加 # -*- coding: utf-8 -*-。"
+ },
+ {
+  "pattern": "'NoneType' object has no attribute",
+  "hint": "上一步返回了 None 再取属性。最常见的是 findAt：没找到几何、或把 x、y、z 分开传时它不报错而是返回 None。用 findAt((x, y, z))（点落在目标内部），或改用 getByBoundingBox 按范围选取，并先检查选到的个数。"
+ },
+ {
+  "pattern": "IndexError: (tuple|list|Sequence)? ?index out of range|IndexError: Sequence index out of range",
+  "hint": "对空序列取了下标：多半是上一步没有真正生成对象（草图/分区失败，或 getByBoundingBox / findAt 没选到东西——选空不报错）。先打印 len(...) 确认对象存在，再取下标。"
+ },
+ {
+  "pattern": "参数过多|应当提供 \\d+, 已获得|takes (exactly|at most) \\d+ arguments?",
+  "hint": "方法调用时参数个数不对。用 abq api <方法名> 核对真实签名，或 abq examples --api <方法名> 看官方用法。"
+ },
+ {
+  "pattern": "area of \\d+ elements? is zero, small, or negative|ErrElemAreaSmallNegZero",
+  "hint": "网格里有面积为零的塌缩单元。尺寸很小的模型（单元尺寸接近 CAE 几何精度）用自由网格时常见：把模型改成 mm 制重建，或对该区域分区后用结构化网格。"
+ },
+ {
+  "pattern": "特征创建失败|面必须包含一些实体|Feature creation failed",
+  "hint": "特征创建失败的常见原因：草图不闭合或自相交；分区用的线没有把面/体完全切开；选取到的几何为空；尺寸相对 CAE 几何精度(约 0.000001 个模型单位)太小——最小特征小于约 0.0001 个模型单位时改用 mm 制建模。同一种写法试两三次不行就换做法，不要反复微调。"
+ },
+ {
+  "pattern": "创建壳的.{0,8}特征失败|Shell.{0,20}feature.{0,10}fail",
+  "hint": "BaseShell 需要一个闭合的草图轮廓：检查各线段首尾是否相接成封闭图形（例如半圆弧要加一条沿轴线的直线封口），有没有重叠或自相交的线。"
+ },
+ {
+  "pattern": "解析刚性表面.{0,12}特征失败|Analytic(al)? rigid surface.{0,30}fail",
+  "hint": "解析刚性面创建失败，逐条核对：轴对称部件的草图里要先画对称轴构造线；轮廓必须是不闭合的线/弧链；轮廓不能跨过对称轴；单段圆弧要小于 180°（半圆拆成两段）。详见 skill abaqus-contact。"
+ },
+ {
+  "pattern": "Invalid variables are specified in an output request",
+  "hint": "输出请求里有该分析步或单元类型不支持的变量名：梁/壳的截面力和弯矩统一请求 SF（结果库里会同时有 SF 和 SM）；接触量请求 CSTRESS、CDISP（结果库里是 CPRESS、COPEN 等）；显式分析没有 CF；拿不准就只保留 S、U、RF 再逐个加。"
+ },
+ {
+  "pattern": "NameError: name '\\w+' is not defined",
+  "hint": "用了未定义的名字：符号常量（如 ON、THREE_D、DEFORMABLE_BODY）来自 abaqusConstants；regionToolset、mesh 等来自 caeModules。Abaqus 自带 Python 是 2.7。"
+ },
+ {
+  "pattern": "findAt could not find|No .* found at|could not find geometric entity",
+  "hint": "findAt 的坐标没有落在几何体上（或落在了边界上产生歧义）。改用 getByBoundingBox(xMin=..,xMax=..) 按范围选取，或把坐标取在面/边的内部。"
+ },
+ {
+  "pattern": "KeyError",
+  "hint": "按名字取对象失败：名字不存在或大小写不符。集合/表面要分清建在部件上(实例里叫 实例名.集合名)还是装配上。 读 ODB 时：集合名一律大写；直接写的 INP（没有 *Assembly）的集合在 rootAssembly.instances['PART-1-1'] 下；`abq odb <odb> --sets` 列出全部集合。"
+ },
+ {
+  "pattern": "cannot be meshed|Mesh generation failed|unable to mesh|could not be meshed|not meshable",
+  "hint": "区域无法按当前控制划分网格：对扫掠/结构化网格先做分区(Partition)，或改用 TET + FREE；二维用 QUAD_DOMINATED/FREE。"
+ },
+ {
+  "pattern": "Analysis Input File Processor exited with an? error|ERRORS? FOUND IN THE INPUT",
+  "hint": "输入文件没通过数据检查：以上面第一条 ***ERROR 为准逐条修，改完先跑 abq datacheck。"
+ },
+ {
+  "pattern": "UNKNOWN (ASSEMBLY|PART|INSTANCE)|has not been defined|HAS NOT BEEN DEFINED|is not a member of|UNKNOWN .*(NSET|ELSET|SET|SURFACE)|not been assigned",
+  "hint": "引用了不存在的集合/表面/实例/材料名：用 abq check <inp> 看名称清单与体检结果（注意部件级集合在装配里要写成 实例名.集合名）。"
+ },
+ {
+  "pattern": "MISSING PROPERTY|density.*(not|must).*(defined|specified)|ZERO MASS|NO MASS|MASS IS ZERO",
+  "hint": "材料缺少该分析类型需要的属性：动力/模态/含重力的分析必须定义 *Density；塑性需要 *Plastic 表（首行塑性应变为 0）。"
+ },
+ {
+  "pattern": "NUMERICAL SINGULARITY|ZERO PIVOT|SOLVER PROBLEM",
+  "hint": "存在未被约束的刚体自由度（消息里给出节点号和自由度）。依次检查：边界条件是否加到了正确的集合/实例；部件之间是否缺 Tie/接触；梁、壳的转动自由度；二维/轴对称模型的刚体平动与转动；纯力加载的接触问题在接触建立前没有约束（改用位移加载或先加小位移建立接触）。"
+ },
+ {
+  "pattern": "NEGATIVE EIGENVALUE",
+  "hint": "刚度矩阵出现负特征值：若同时有 ZERO PIVOT，多半是刚体位移未约束；否则常见于屈曲/软化失稳或接触状态突变。少量负特征值且最终收敛通常可接受，但要在报告里说明；持续出现就要查约束、接触和材料曲线。"
+ },
+ {
+  "pattern": "TOO MANY ATTEMPTS MADE FOR THIS INCREMENT|TIME INCREMENT REQUIRED IS LESS THAN THE MINIMUM|CONVERGENCE (IS )?JUDGED UNLIKELY",
+  "hint": "增量步反复折减仍不收敛。先看 .msg 最后一次迭代里最大残差/最大修正所在的节点，定位出问题的区域，再对症处理：载荷或单位量级是否离谱；接触是否用力控制且初始没接触上（改位移控制或加小量接触稳定）；材料曲线是否软化；大变形是否没开 NLGEOM；初始增量步是否太大。不要靠放宽收敛容差蒙混过关。"
+ },
+ {
+  "pattern": "EXCESSIVE DISTORTION|EXCESSIVELY DISTORTED|IS DISTORTED|VOLUME OF .* ELEMENTS? IS ZERO, SMALL, OR NEGATIVE|negative.*volume",
+  "hint": "单元畸变/体积为负：先怀疑载荷或材料参数的单位量级（差 1000 倍很常见），其次是网格质量和是否需要 NLGEOM；初始就为负则是节点次序或几何问题。"
+ },
+ {
+  "pattern": "Strain increment has exceeded fifty times|PLASTICITY ALGORITHM DID NOT CONVERGE",
+  "hint": "应变增量远超屈服应变：载荷/位移量级或单位可能错了，或增量步太大；核对 *Plastic 表是否为真应力-塑性应变且单调。"
+ },
+ {
+  "pattern": "FACING IN THE WRONG DIRECTION WITH RESPECT TO THE MASTER",
+  "hint": "接触面朝向反了：主面（常见于解析刚性面或壳/梁面）的法向没有指向从面，接触不会发生（反力和 CPRESS 为 0）。把该表面的 side1Edges/side1Faces 换成 side2Edges/side2Faces 再试。"
+ },
+ {
+  "pattern": "OVERCLOS|INITIAL OVERCLOSURE",
+  "hint": "接触面有初始过盈：先确认装配位置是否正确；很小的几何误差可用 adjust 调整，真实过盈配合用 interference fit，过盈很大说明部件位置摆错了。"
+ },
+ {
+  "pattern": "(NODES?|SLAVE).{0,80}(NOT|UNABLE).{0,40}TIED|WILL NOT BE TIED|position tolerance|ARE NOT TIED",
+  "hint": "Tie 的从面节点没找到主面（两面之间有间隙或位置容差太小），这些节点实际上没被绑定：检查两个实例的相对位置，必要时设 positionTolerance，并在 abq check 的体检里确认。"
+ },
+ {
+  "pattern": "UNCONNECTED REGION|REGIONS? .* NOT CONNECTED",
+  "hint": "模型里有互不相连的区域：相邻部件之间缺 Tie、接触或公共节点。"
+ },
+ {
+  "pattern": "ARTIFICIAL (STRAIN )?ENERGY|HOURGLASS(ING)? (MODES?|ENERGY)|EXCESSIVE HOURGLASS",
+  "hint": "沙漏/伪应变能偏大：减缩积分单元(C3D8R/CPS4R/S4R)在弯曲方向网格太粗。厚度方向至少 4 层单元，或改用 C3D8I、C3D20R，或加强沙漏控制；用 abq verify 看 ALLAE/ALLIE 是否低于 5%。"
+ },
+ {
+  "pattern": "ratio of deformation speed to wave speed exceeds",
+  "hint": "显式分析中单元变形速度超过波速：加载太猛（载荷应平滑施加）、单位/材料参数量级错误，或质量缩放过大。"
+ },
+ {
+  "pattern": "DISPLACEMENT INCREMENT FOR CONTACT IS TOO BIG|SEVERE DISCONTINUITY ITERATIONS",
+  "hint": "接触状态反复变化难以收敛：减小增量步，保证从面网格不比主面粗，初始让两面刚好接触或用位移控制先建立接触。"
+ },
+ {
+  "pattern": "failed to obtain memory|unable to allocate|insufficient virtual memory",
+  "hint": "系统内存（提交内存）不够用，多半是本机同时有别的求解任务在跑：这不是模型的问题。等一两分钟重试同一条命令，不要并行提交多个作业。"
+ },
+ {
+  "pattern": "out of memory|insufficient memory|MEMORY .{0,40}EXCEED|not enough memory|MEMORY ESTIMATE|increase the memory",
+  "hint": "求解器内存上限不够：abq run 默认按当前空闲内存自动取 1.5~8 GB，大模型用 abq run <job> --memory 32gb 显式加大（先确认本机还有这么多空闲内存），或减小模型规模、减少 cpus。"
+ },
+ {
+  "pattern": "\\.lck|lock file|is currently being used|already (running|exists)",
+  "hint": "同名作业的锁文件(.lck)还在：确认没有同名作业在跑之后删掉 <job>.lck 再提交，或换一个作业名。"
+ }
+]

@@ -1,0 +1,45 @@
+{
+ "id": "c01_solid_cantilever_pressure_gravity",
+ "title": "三维实体悬臂梁：顶面压强 + 自重（静力）",
+ "tags": [
+  "静力",
+  "三维实体",
+  "C3D8I",
+  "重力",
+  "压强",
+  "分区",
+  "结构化网格",
+  "m-t-s"
+ ],
+ "keywords": [
+  "cantilever",
+  "solid",
+  "static",
+  "gravity",
+  "pressure",
+  "partition",
+  "beam"
+ ],
+ "problem": "2 m × 0.3 m × 0.4 m 混凝土悬臂梁，一端固定，顶面 50 kPa 压强加自重，求端部挠度和支座反力。",
+ "approach": [
+  "草图拉伸建部件，跨中分区，C3D8I 结构化六面体网格（高度方向 8 层）",
+  "用 getByBoundingBox 在实例上选面建装配级集合/表面",
+  "脚本只导出 INP，abq run 求解，post.py 用 abaqus python 读 ODB"
+ ],
+ "lessons": [
+  "有重力必须定义密度；m–t–s 制下混凝土密度是 2.5 不是 2500",
+  "C3D8I 在规则网格下弯曲很准，不需要很多层",
+  "短粗梁(L/H=5)挠度比欧拉梁公式大约 4%，是剪切变形，不是错误"
+ ],
+ "verified": {
+  "tip_deflection_m": 0.000772,
+  "theory_euler_plus_shear_m": 0.000776,
+  "reaction_kN": 35.88,
+  "theory_reaction_kN": 35.88
+ },
+ "files": [
+  "model.py",
+  "post.py"
+ ],
+ "source": "seed"
+}

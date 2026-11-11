@@ -1,0 +1,14 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "C3D8R bar, lateral contraction free"},
+  {"name": "truss", "expect": "pass", "what": "one T3D2 truss element"},
+  {"name": "short_table", "expect": "fail", "fails": ["axial_stress"],
+   "what": "hardening table ends at a plastic strain of 0.01: perfectly plastic afterwards (270 MPa)"},
+  {"name": "fixed_end", "expect": "fail", "fails": ["uniaxial_state"],
+   "what": "both end faces fully gripped: the stress state is not uniaxial near the ends"},
+  {"name": "elastic_only", "expect": "fail", "fails": ["axial_stress", "peeq"],
+   "what": "no plasticity defined: 4000 MPa"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_peeq"],
+   "what": "correct ODB, the total strain 0.02 reported as PEEQ"}
+ ]
+}

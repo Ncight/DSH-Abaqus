@@ -1,0 +1,17 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "20 B32 elements"},
+  {"name": "b31", "expect": "pass", "what": "40 B31 elements"},
+  {"name": "b33", "expect": "pass", "what": "10 B33 (Euler-Bernoulli) elements"},
+  {"name": "pinned", "expect": "fail", "fails": ["max_deflection", "end_moment"],
+   "what": "ends pinned instead of fixed: deflection x 5, no fixing moment"},
+  {"name": "weak_axis", "expect": "fail", "fails": ["max_deflection"],
+   "what": "section orientation turned by 90 degrees: bending about the weak axis, deflection x 4"},
+  {"name": "coarse_b31", "expect": "fail", "fails": ["end_moment"],
+   "what": "4 B31 elements: the lumped nodal loads give a fixing moment (1 - 1/n^2) q L^2 / 12, 6 % low"},
+  {"name": "solid", "expect": "fail", "fails": ["beam_elements"],
+   "what": "C3D20R solid model although the task demands beam elements"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_total_reaction_N"],
+   "what": "correct ODB, result.json gives the reaction of one support as the total"}
+ ]
+}

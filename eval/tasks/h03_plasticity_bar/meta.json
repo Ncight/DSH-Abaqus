@@ -1,0 +1,19 @@
+{
+ "id": "h03_plasticity_bar",
+ "title": "钢杆单轴拉伸至 2% 应变（线性强化弹塑性）",
+ "split": "holdout",
+ "job": "plastic",
+ "timeout_s": 1200,
+ "tags": ["static", "nonlinear-material", "plasticity", "hardening-table", "displacement-control", "boundary-conditions"],
+ "expected": {
+  "axial_stress_Pa": 2.87129e8,
+  "peeq": 0.018564,
+  "hydrostatic_pressure_Pa": -9.5710e7
+ },
+ "tolerances": {
+  "axial_stress_rel": 0.01,
+  "peeq_rel": 0.02,
+  "hydrostatic_pressure_rel": 0.03,
+  "report_rel": 0.03
+ }
+}

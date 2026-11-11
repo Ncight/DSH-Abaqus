@@ -1,0 +1,26 @@
+{
+ "id": "x07_plastic_collapse_beam",
+ "title": "简支梁跨中集中力的塑性极限荷载（理想弹塑性 + 位移控制 + 荷载平台）",
+ "split": "holdout",
+ "job": "collapse",
+ "timeout_s": 2400,
+ "tags": ["plasticity", "limit-load", "plastic-hinge", "displacement-control", "beam", "hard"],
+ "expected": {
+  "collapse_load_N": 62500.0,
+  "first_yield_load_N": 41667.0,
+  "plastic_moment_Nm": 31250.0,
+  "span_m": 2.0,
+  "elastic_stiffness_N_per_m": 4.98e6,
+  "midspan_point": [1.0, 0.0, 0.0],
+  "support_point": [0.0, 0.0, 0.0]
+ },
+ "tolerances": {
+  "collapse_rel": 0.04,
+  "plateau_fraction": 0.85,
+  "plateau_load_rel": 0.02,
+  "plateau_growth": 0.05,
+  "stiffness_rel": 0.03,
+  "report_rel": 0.03,
+  "first_yield_rel": 0.05
+ }
+}

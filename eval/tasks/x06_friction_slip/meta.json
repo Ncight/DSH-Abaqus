@@ -1,0 +1,23 @@
+{
+ "id": "x06_friction_slip",
+ "title": "弹性滑块在刚性平面上的摩擦滑动（接触 + 库仑摩擦 + 两步加载）",
+ "split": "holdout",
+ "job": "slip",
+ "timeout_s": 2400,
+ "tags": ["contact", "friction", "rigid-surface", "multi-step", "displacement-control", "hard"],
+ "expected": {
+  "normal_force_N": 10000.0,
+  "sliding_force_N": 3000.0,
+  "friction_coefficient": 0.3,
+  "push_m": 1.0e-3
+ },
+ "tolerances": {
+  "normal_rel": 0.01,
+  "sliding_rel": 0.02,
+  "ratio_rel": 0.02,
+  "push_rel": 0.05,
+  "contact_ratio_rel": 0.03,
+  "min_slip_m": 5.0e-4,
+  "report_rel": 0.03
+ }
+}

@@ -1,0 +1,47 @@
+{
+ "id": "c03_rigid_cylinder_on_block_plane_strain",
+ "title": "平面应变：解析刚性圆柱压头（带参考点）压弹性块，与 Hertz 线接触解对比",
+ "tags": [
+  "接触",
+  "解析刚性面",
+  "参考点",
+  "平面应变",
+  "Hertz",
+  "线接触",
+  "CPE4R",
+  "位移控制"
+ ],
+ "keywords": [
+  "contact",
+  "analytical rigid",
+  "reference point",
+  "hertz",
+  "line contact",
+  "cylinder",
+  "indenter",
+  "CPRESS"
+ ],
+ "problem": "半径 0.05 m 的刚性圆柱压入 0.20 m × 0.10 m 的弹性块（E=1000000 kPa, ν=0.3）2 mm，无摩擦，求接触压力峰值。",
+ "approach": [
+  "压头用 ANALYTIC_RIGID_SURFACE 部件，半圆画成两段四分之一圆弧",
+  "参考点建在压头部件上，位移和转角全部给定在参考点",
+  "刚性面取朝向弹性块的一侧（本例草图方向下是 side2Edges）",
+  "弹性块顶面作从面，网格 4 mm（接触半宽内约 4 个单元，再密更准）"
+ ],
+ "lessons": [
+  "解析刚性面的单段圆弧必须小于 180°，否则特征创建失败",
+  "刚性面朝向选反时不报错，只有警告 FACING IN THE WRONG DIRECTION，结果是反力和 CPRESS 全为 0",
+  "位移控制下力是结果量：从参考点反力读出每单位厚度的力，再代入 Hertz 公式核对",
+  "线接触 Hertz：a=√(4PR/(πE*))，p0=2P/(πa)，E*=E/(1−ν²)"
+ ],
+ "verified": {
+  "force_kN_per_m": 1046.65,
+  "cpress_max_kPa": 84970.6,
+  "hertz_p0_kPa": 85567.0,
+  "error_percent": -0.7
+ },
+ "files": [
+  "model.py"
+ ],
+ "source": "seed"
+}

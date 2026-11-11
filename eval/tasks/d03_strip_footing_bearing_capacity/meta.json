@@ -1,0 +1,23 @@
+{
+ "id": "d03_strip_footing_bearing_capacity",
+ "title": "不排水粘土上刚性条形基础的极限承载力（Prandtl 解：Mises 屈服应力换算 + 不可压缩 + 位移控制平台）",
+ "suite": "domain",
+ "split": "tune",
+ "job": "footing",
+ "timeout_s": 1800,
+ "tags": ["bearing-capacity", "undrained", "plasticity", "limit-load", "plane-strain", "incompressible", "domain"],
+ "expected": {
+  "ultimate_load_kN_per_m": 1028.32,
+  "bearing_capacity_factor": 5.1416,
+  "mises_yield_stress_kPa": 173.205,
+  "footing_point": [0.0, 0.0, 0.0]
+ },
+ "tolerances": {
+  "collapse_below": 0.07,
+  "collapse_above": 0.07,
+  "plateau_fraction": 0.85,
+  "plateau_load_rel": 0.02,
+  "plateau_growth": 0.05,
+  "report_rel": 0.03
+ }
+}

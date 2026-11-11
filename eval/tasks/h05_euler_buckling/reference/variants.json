@@ -1,0 +1,16 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "3-D beam model, 20 B32, reference load 1000 N"},
+  {"name": "unit_load", "expect": "pass", "what": "40 B33, reference load 1 N (eigenvalue = critical load)"},
+  {"name": "solid_pressure", "expect": "pass",
+   "what": "C3D20R solid column, pinned reference points, reference load applied as a pressure (not readable from *CLOAD)"},
+  {"name": "fixed_fixed", "expect": "fail", "fails": ["critical_load"],
+   "what": "end rotations restrained: 4 x Pcr"},
+  {"name": "cantilever", "expect": "fail", "fails": ["critical_load"],
+   "what": "fixed-free column: Pcr / 4"},
+  {"name": "fudged_ref", "expect": "fail", "fails": ["critical_load", "report_reference_load_N"],
+   "what": "fixed-free model, result.json claims a 4000 N reference load (1000 N applied) to hit the textbook value"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_critical_load_N"],
+   "what": "correct ODB, critical load in result.json from the fixed-fixed formula"}
+ ]
+}

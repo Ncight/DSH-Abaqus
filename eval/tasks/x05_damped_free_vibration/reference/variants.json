@@ -1,0 +1,30 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "40 B31, mass-proportional damping alpha = 4.200, implicit dynamics dt = 5e-4, U every 0.002 s"},
+  {"name": "beta_only", "expect": "pass", "what": "stiffness-proportional damping beta = 3.810e-4"},
+  {"name": "two_coeff", "expect": "pass", "what": "alpha and beta for 2 % in modes 1 and 2"},
+  {"name": "plane_stress", "expect": "pass", "what": "2-D continuum model CPS4I 50 x 4, tip load as shear traction"},
+  {"name": "no_damping", "expect": "fail", "fails": ["damping_ratio"], "passes": ["first_frequency", "static_deflection"],
+   "what": "no damping defined"},
+  {"name": "alpha_hz", "expect": "fail", "fails": ["damping_ratio"], "passes": ["first_frequency", "report_rayleigh"],
+   "what": "alpha = 2 zeta f with f in Hz: zeta = 0.32 %"},
+  {"name": "beta_hz", "expect": "fail", "fails": ["damping_ratio"], "passes": ["first_frequency", "report_rayleigh"],
+   "what": "beta = 2 zeta / f with f in Hz: zeta = 12.6 %"},
+  {"name": "general_section", "expect": "fail", "fails": ["damping_ratio", "report_rayleigh"], "passes": ["first_frequency", "static_deflection"],
+   "what": "damping defined in the material, beam section integrated before the analysis (*BEAM GENERAL SECTION): the material damping is silently ignored"},
+  {"name": "quasi_static", "expect": "fail", "fails": ["damping_ratio"], "passes": ["static_deflection"],
+   "what": "correct alpha, APPLICATION=QUASI-STATIC (backward Euler): numerical damping more than doubles zeta"},
+  {"name": "coarse_dt", "expect": "fail", "fails": ["first_frequency", "output_interval"],
+   "what": "correct alpha, dt = 6e-3 = T/10: period elongation and too few frames"},
+  {"name": "load_not_removed", "expect": "fail", "fails": ["first_frequency", "damping_ratio"], "passes": ["static_deflection"],
+   "what": "tip force kept in the dynamic step: nothing moves"},
+  {"name": "ramp_removed", "expect": "fail", "fails": ["first_frequency", "damping_ratio"], "passes": ["static_deflection"],
+   "what": "tip force ramped down over the dynamic step: quasi-static unloading, no free vibration"},
+  {"name": "sparse_output", "expect": "fail", "fails": ["output_interval"], "passes": ["first_frequency", "damping_ratio"],
+   "what": "correct analysis, U frames every 0.01 s"},
+  {"name": "short_run", "expect": "fail", "fails": ["free_vibration_duration"], "passes": ["first_frequency", "damping_ratio"],
+   "what": "correct analysis, only 0.3 s"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_damping_ratio"], "passes": ["damping_ratio", "first_frequency"],
+   "what": "correct ODB, logarithmic decrement reported as the damping ratio"}
+ ]
+}

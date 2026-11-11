@@ -1,0 +1,41 @@
+{
+ "id": "c04_axisym_ring_external_pressure",
+ "title": "轴对称：厚壁圆环受外压（轴向不伸缩），偏置网格",
+ "tags": [
+  "轴对称",
+  "CAX4R",
+  "压强",
+  "偏置种子",
+  "结构化网格",
+  "Lame"
+ ],
+ "keywords": [
+  "axisymmetric",
+  "ring",
+  "pressure",
+  "bias",
+  "seedEdgeByBias",
+  "lame",
+  "hoop stress"
+ ],
+ "problem": "内半径 0.5 m、外半径 0.8 m、高 0.2 m 的钢环，外表面受 1000 kPa 压强，两端面轴向位移为 0。",
+ "approach": [
+  "AXISYMMETRIC 部件，草图 x=r、y=轴向，先画对称轴构造线",
+  "径向边用 seedEdgeByBias 向内壁加密，轴向边 seedEdgeByNumber",
+  "两端面 u2=0 模拟无轴向应变；外表面 Pressure"
+ ],
+ "lessons": [
+  "轴对称模型里 S11 径向、S22 轴向、S33 环向",
+  "线性减缩单元的应力在单元中心，最靠近内壁的积分点比内壁理论值略小，要更准就加密或用 CAX8R",
+  "偏置方向由边的方向决定，生成后要检查小单元是否在该密的一端"
+ ],
+ "verified": {
+  "hoop_at_innermost_ip_kPa": -3256.3,
+  "lame_hoop_at_bore_kPa": -3282.1,
+  "radial_at_outer_kPa": -993.8
+ },
+ "files": [
+  "model.py"
+ ],
+ "source": "seed"
+}

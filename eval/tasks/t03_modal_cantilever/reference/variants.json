@@ -1,0 +1,14 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "3-D solid, C3D20R, 4 x 8 x 80"},
+  {"name": "beam_b32", "expect": "pass", "what": "3-D beam model, 40 B32 elements"},
+  {"name": "coarse_c3d8r", "expect": "fail", "fails": ["frequency_1", "frequency_3"],
+   "what": "CAE default C3D8R, seed 0.025 (2 x 4 x 40): 13 % too low"},
+  {"name": "wrong_density", "expect": "fail", "fails": ["frequency_1", "frequency_2", "frequency_3"],
+   "what": "density 7.85 (t/m3) in an SI model"},
+  {"name": "planar_2d", "expect": "fail", "fails": ["frequency_1", "frequency_2", "frequency_3"],
+   "what": "2-D plane-stress model: the weak-axis bending modes are missing"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_frequencies_Hz"],
+   "what": "correct ODB, result.json lists textbook weak-axis modes 41.78 / 261.8 / 733.1"}
+ ]
+}

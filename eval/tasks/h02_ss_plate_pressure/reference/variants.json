@@ -1,0 +1,19 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "complete plate, S4R, 40 x 40"},
+  {"name": "s8r", "expect": "pass",
+   "what": "complete plate, S8R, 20 x 20 (element-nodal principal stress peaks at 3.01e6 Pa next to the corners)"},
+  {"name": "quarter", "expect": "pass", "what": "quarter plate with two symmetry edges, S4R, 20 x 20"},
+  {"name": "s4r_10x10", "expect": "pass", "what": "complete plate, S4R, 10 x 10: a modest mesh that is accurate enough"},
+  {"name": "clamped", "expect": "fail", "fails": ["center_deflection"],
+   "what": "edges fully fixed instead of simply supported"},
+  {"name": "corner_supported", "expect": "fail", "fails": ["center_deflection"],
+   "what": "plate held at its four corners only, the edges are free"},
+  {"name": "coarse", "expect": "fail", "fails": ["max_bending_stress"],
+   "what": "S4R, 4 x 4 elements: the nearest stress point is 0.18 m away from the plate centre (-12 %)"},
+  {"name": "solid", "expect": "fail", "fails": ["shell_elements"],
+   "what": "C3D8R solid plate with one element through the thickness although the task demands shells"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_max_bending_stress_Pa"],
+   "what": "correct ODB, bending stress reported in MPa"}
+ ]
+}

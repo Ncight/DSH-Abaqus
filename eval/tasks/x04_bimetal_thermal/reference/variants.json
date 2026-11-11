@@ -1,0 +1,22 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "2-D plane stress, CPS8R 100 x (2+2), stress-free at 20 C, heated to 120 C"},
+  {"name": "cps4i", "expect": "pass", "what": "2-D plane stress, CPS4I 100 x (2+2)"},
+  {"name": "solid3d", "expect": "pass", "what": "3-D solid C3D20R 50 x (2+2) x 4"},
+  {"name": "nlgeom_on", "expect": "pass", "what": "default with NLGEOM"},
+  {"name": "swapped_moduli", "expect": "pass",
+   "what": "KNOWN BLIND SPOT: moduli of the two layers exchanged - the deflection is identical (formula symmetric in the modular ratio for equal thicknesses)"},
+  {"name": "plane_strain", "expect": "fail", "fails": ["tip_deflection"], "what": "CPE8R instead of plane stress: +30 %"},
+  {"name": "no_initial_temp", "expect": "fail", "fails": ["tip_deflection"],
+   "what": "120 C applied without the 20 C stress-free temperature: rise of 120 K, +20 %"},
+  {"name": "equal_alpha", "expect": "fail", "fails": ["tip_deflection"], "what": "both layers with the same expansion coefficient: no bending"},
+  {"name": "unbonded", "expect": "fail", "fails": ["tip_deflection"], "what": "two separate bodies, no tie: no bending"},
+  {"name": "swapped_layers", "expect": "fail", "fails": ["tip_deflection"], "what": "layer B below, layer A on top: bends towards +y"},
+  {"name": "coarse_cps4r", "expect": "fail", "fails": ["tip_deflection"],
+   "what": "CPS4R with one element per layer: the layers have no bending stiffness of their own, +36 %"},
+  {"name": "cps4_full", "expect": "fail", "fails": ["tip_deflection"], "passes": ["report_tip_deflection_m"],
+   "what": "fully integrated CPS4, 100 x (2+2) elements of aspect ratio 2: shear locking, -9.7 %"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_tip_deflection_m"], "passes": ["tip_deflection"],
+   "what": "correct ODB, deflection reported in mm"}
+ ]
+}

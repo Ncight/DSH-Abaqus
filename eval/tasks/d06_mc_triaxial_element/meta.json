@@ -1,0 +1,22 @@
+{
+ "id": "d06_mc_triaxial_element",
+ "title": "摩尔–库仑土单元三轴压缩：围压初始应力平衡 + 破坏强度",
+ "suite": "domain",
+ "split": "holdout",
+ "job": "triax",
+ "timeout_s": 1800,
+ "tags": ["soil", "mohr-coulomb", "triaxial", "initial-stress", "material-test", "plasticity", "domain"],
+ "expected": {
+  "cell_pressure_kPa": 100.0,
+  "axial_stress_failure_kPa": 369.28,
+  "deviator_stress_failure_kPa": 269.28,
+  "axial_strain": 0.05,
+  "height_m": 1.0
+ },
+ "tolerances": {
+  "confinement_displacement_m": 1.0e-6,
+  "stress_rel": 0.02,
+  "strain_rel": 0.02,
+  "report_rel": 0.02
+ }
+}

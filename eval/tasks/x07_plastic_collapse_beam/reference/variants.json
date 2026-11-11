@@ -1,0 +1,30 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "100 B21, midspan rotation held (symmetry), midspan deflection prescribed to 50 mm in 50 increments"},
+  {"name": "b22", "expect": "pass", "what": "50 B22, nothing held at midspan"},
+  {"name": "b31_3d", "expect": "pass", "what": "3-D model, 100 B31, midspan rotation held"},
+  {"name": "half_symmetry", "expect": "pass", "what": "half the beam, 50 B21, symmetry conditions at midspan (reactions doubled by the checker)"},
+  {"name": "tiny_hardening", "expect": "pass", "what": "100 B21, nothing held at midspan, hardening slope E/10000 instead of exactly zero"},
+  {"name": "riks", "expect": "pass", "what": "midspan rotation held, force loading with the Riks method, stopped at 50 mm"},
+  {"name": "plane_stress", "expect": "pass", "may_miss": ["elastic_stiffness", "report_first_yield_load_N"],
+   "what": "2-D continuum CPS4I 200 x 10, supports at the bottom corners"},
+  {"name": "b21_unrestrained", "expect": "fail", "fails": ["job_completed", "plateau_reached"],
+   "what": "THE TRAP: 100 B21, perfect plasticity, nothing held at midspan - the two elements next to the load form a singular two-hinge mode and the job stops at the plateau"},
+  {"name": "force_early", "expect": "fail", "fails": ["collapse_load", "plateau_reached"],
+   "what": "force control up to 55 kN: completes, but no collapse"},
+  {"name": "small_push", "expect": "fail", "fails": ["collapse_load", "plateau_reached"],
+   "what": "prescribed deflection of 9 mm only"},
+  {"name": "elastic", "expect": "fail", "fails": ["collapse_load", "plateau_reached"], "what": "no plasticity"},
+  {"name": "hardening", "expect": "fail", "fails": ["collapse_load", "plateau_reached"], "what": "linear hardening H = E/20"},
+  {"name": "clamped", "expect": "fail", "fails": ["collapse_load"], "passes": ["plateau_reached"],
+   "what": "both ends built in: 8 Mp / L"},
+  {"name": "swapped_section", "expect": "fail", "fails": ["collapse_load"], "passes": ["plateau_reached"],
+   "what": "section 0.10 wide x 0.05 deep"},
+  {"name": "coarse_b21", "expect": "fail", "fails": ["collapse_load"], "passes": ["plateau_reached"],
+   "what": "20 B21: the hinge moment is sampled 50 mm away from midspan, +5.3 %"},
+  {"name": "nlgeom_pinned", "expect": "fail", "fails": ["plateau_reached"],
+   "what": "NLGEOM with both ends held horizontally: catenary action"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_collapse_load_N"], "passes": ["collapse_load", "plateau_reached"],
+   "what": "correct ODB, collapse load reported in kN"}
+ ]
+}

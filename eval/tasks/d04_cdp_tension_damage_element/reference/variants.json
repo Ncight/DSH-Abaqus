@@ -1,0 +1,22 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "one C3D8R, three static steps, strain increments 1e-5"},
+  {"name": "cps4r", "expect": "pass", "what": "one CPS4R, plane stress"},
+  {"name": "c3d8", "expect": "pass", "what": "one fully integrated C3D8"},
+  {"name": "one_step", "expect": "pass", "what": "single step, displacement history as tabular amplitude"},
+  {"name": "series_5", "expect": "pass", "what": "NOT A NEGATIVE: five elements in series follow the homogeneous path (no imperfection, no localisation) and give the identical response"},
+  {"name": "no_damage", "expect": "fail", "fails": ["unloading_modulus", "damage_at_end"], "passes": ["peak_stress", "stress_at_0p0004"],
+   "what": "no tension damage table: unloading with E0, no damage variable"},
+  {"name": "displacement_type", "expect": "fail", "fails": ["stress_at_0p0004"], "passes": ["peak_stress"],
+   "what": "stiffening and damage tables typed as DISPLACEMENT: the numbers are read as metres"},
+  {"name": "total_strain", "expect": "fail", "fails": ["stress_at_0p0004"], "passes": ["peak_stress"],
+   "what": "total strains entered where Abaqus expects cracking strains"},
+  {"name": "viscosity", "expect": "fail", "fails": ["stress_at_0p0004"], "what": "viscosity parameter 0.2 at a step time of 1"},
+  {"name": "unit_mpa", "expect": "fail", "fails": ["peak_stress", "stress_at_0p0004"], "what": "tension stiffening stresses in MPa in a kPa model"},
+  {"name": "lateral_fixed", "expect": "fail", "fails": ["uniaxial_state"], "what": "lateral faces held: uniaxial strain"},
+  {"name": "no_unload", "expect": "fail", "fails": ["unloading_modulus", "strain_at_A"], "passes": ["peak_stress", "damage_at_end"],
+   "what": "monotonic loading without the unloading branch"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_unloading_modulus_kPa"], "passes": ["unloading_modulus", "stress_at_0p0004"],
+   "what": "correct ODB, unloading modulus reported as E0"}
+ ]
+}

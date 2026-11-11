@@ -1,0 +1,24 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "2-D CPE4R 1 x 50, vertical dofs held, grounded dashpots rho Vs A + force 2 rho Vs A v(t), implicit dt = 1 ms"},
+  {"name": "periodic_ties", "expect": "pass", "what": "left / right nodes of every level tied in both dofs"},
+  {"name": "solid_3d", "expect": "pass", "what": "3-D column 4 x 4 x 50 m, C3D8R"},
+  {"name": "explicit_2d", "expect": "pass", "what": "Abaqus/Explicit, two-node dashpots to fixed points"},
+  {"name": "rigid_base", "expect": "fail", "fails": ["late_residual"], "passes": ["peak_velocity", "peak_time"],
+   "what": "base velocity prescribed = incident wavelet: first arrival right, energy trapped"},
+  {"name": "force_factor_1", "expect": "fail", "fails": ["peak_velocity"], "passes": ["peak_time", "late_residual"],
+   "what": "equivalent force rho Vs v instead of 2 rho Vs v: half the motion"},
+  {"name": "no_dashpot", "expect": "fail", "fails": ["peak_velocity", "late_residual"],
+   "what": "force on a free base without dashpot: double motion, nothing absorbed"},
+  {"name": "dashpot_vp", "expect": "fail", "fails": ["peak_velocity", "late_residual"],
+   "what": "dashpot rho Vp: peak 0.139, 30 % reflected"},
+  {"name": "not_area_scaled", "expect": "fail", "fails": ["peak_velocity", "late_residual"],
+   "what": "per-node dashpot and force = per-unit-area values (tributary area is 2 m2)"},
+  {"name": "coarse_mesh", "expect": "fail", "fails": ["peak_velocity"], "what": "h = 5 m"},
+  {"name": "coarse_dt", "expect": "fail", "fails": ["output_interval"], "what": "dt = 20 ms"},
+  {"name": "free_sides", "expect": "fail", "fails": ["peak_velocity", "peak_time", "late_residual"],
+   "what": "vertical dofs free (only the base held vertically), four elements across the width: the column bends like a cantilever (peak +22 %, 0.07 s late, 27 % residual)"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_time_of_peak_s"], "passes": ["peak_velocity", "peak_time", "late_residual"],
+   "what": "correct ODB, time of the peak reported as t0 = 0.3 s"}
+ ]
+}

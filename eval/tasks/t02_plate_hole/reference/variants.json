@@ -1,0 +1,14 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "quarter model, CPS8R, structured graded ring 24 x 20 around the hole"},
+  {"name": "full_plate", "expect": "pass", "what": "complete plate, CPS8R free mesh, hole edge size 0.0008"},
+  {"name": "coarse", "expect": "fail", "fails": ["max_stress"],
+   "what": "complete plate, CAE default CPS4R, global size 0.01, no refinement at the hole"},
+  {"name": "cps8r_global", "expect": "fail", "fails": ["max_stress"],
+   "what": "complete plate, CPS8R, global size 0.005 only, no refinement at the hole"},
+  {"name": "wrong_load", "expect": "fail", "fails": ["max_stress"],
+   "what": "tension entered as 100 (Pa) instead of 100e6"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_max_stress_Pa"],
+   "what": "correct ODB, max stress reported in MPa"}
+ ]
+}

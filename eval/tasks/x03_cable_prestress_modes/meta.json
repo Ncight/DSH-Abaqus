@@ -1,0 +1,20 @@
+{
+ "id": "x03_cable_prestress_modes",
+ "title": "预张拉钢丝的横向固有频率（应力刚化 + 预应力模态）",
+ "split": "tune",
+ "job": "cable",
+ "timeout_s": 1500,
+ "tags": ["frequency", "prestress", "nlgeom", "stress-stiffening", "duplicate-modes", "hard"],
+ "expected": {
+  "frequencies_Hz": [9.005, 18.011, 27.016],
+  "tension_N": 20000.0,
+  "area_m2": 7.853982e-5
+ },
+ "tolerances": {
+  "frequency_rel": 0.02,
+  "tension_rel": 0.02,
+  "merge_rel": 0.005,
+  "rigid_body_below_Hz": 0.05,
+  "report_rel": 0.03
+ }
+}

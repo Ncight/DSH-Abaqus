@@ -1,0 +1,28 @@
+{
+ "id": "d02_terzaghi_consolidation",
+ "title": "太沙基一维固结：超静孔压消散与沉降（流固耦合 + 渗透系数/水重度单位）",
+ "suite": "domain",
+ "split": "tune",
+ "job": "consol",
+ "timeout_s": 1800,
+ "tags": ["consolidation", "pore-pressure", "coupled", "soil", "permeability", "units", "domain"],
+ "expected": {
+  "surcharge_kPa": 100.0,
+  "constrained_modulus_kPa": 13461.54,
+  "cv_m2_per_s": 1.373626e-4,
+  "time_at_tv_s": 145600.0,
+  "excess_pore_pressure_base_kPa": 77.23,
+  "settlement_at_tv_m": 0.037446,
+  "final_settlement_m": 0.0742857,
+  "base_point": [0.0, 0.0, 0.0],
+  "surface_point": [0.0, 10.0, 0.0]
+ },
+ "tolerances": {
+  "probe_distance_m": 1.0,
+  "frame_time_rel": 0.005,
+  "pressure_rel": 0.03,
+  "settlement_rel": 0.03,
+  "final_rel": 0.02,
+  "report_rel": 0.03
+ }
+}

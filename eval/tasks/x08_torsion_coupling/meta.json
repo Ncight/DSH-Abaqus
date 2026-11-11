@@ -1,0 +1,22 @@
+{
+ "id": "x08_torsion_coupling",
+ "title": "实心圆轴扭转：参考点耦合施加扭矩（耦合约束 + 转角输出 + 表面剪应力）",
+ "split": "holdout",
+ "job": "torsion",
+ "timeout_s": 2400,
+ "tags": ["torsion", "coupling", "reference-point", "moment-load", "solid", "mesh-quality", "hard"],
+ "expected": {
+  "twist_angle_rad": 0.012315,
+  "max_shear_stress_Pa": 3.9789e7,
+  "mises_Pa": 6.8916e7,
+  "torque_Nm": 500.0,
+  "radius_m": 0.02
+ },
+ "tolerances": {
+  "twist_rel": 0.02,
+  "stress_rel": 0.04,
+  "torque_rel": 0.01,
+  "report_rel": 0.03,
+  "report_stress_rel": 0.04
+ }
+}

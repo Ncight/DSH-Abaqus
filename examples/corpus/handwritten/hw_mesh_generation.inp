@@ -1,0 +1,206 @@
+*HEADING
+ hand-written test of mesh generation semantics (compared node by node with Abaqus)
+** Every node of interest carries a MASS element, because the output database only
+** keeps nodes that some element uses.
+**
+** ---- A. *NGEN along a parabola (extra point = midpoint, given by coordinates)
+*NODE
+ 101, 0., 0., 0.
+ 111, 10., 0., 0.
+*NGEN, LINE=P, NSET=PARAB
+ 101, 111, 1, , 5., 2., 0.
+**
+** ---- B. *NGEN along circular arcs
+*NODE
+ 201, 1., 0., 0.
+ 211, 0., 1., 0.
+ 301, 1., 0., 5.
+ 331, 0., -1., 5.
+ 399, 0., 0., 5.
+** minor arc, centre by coordinates
+*NGEN, LINE=C, NSET=ARC1
+ 201, 211, 1, , 0., 0., 0.
+** 270 degrees the long way round: centre node and normal
+*NGEN, LINE=C, NSET=ARC2
+ 301, 331, 1, 399, , , , 0., 0., 1.
+**
+** ---- C. *NFILL with bias
+*NODE, NSET=A1
+ 401, 0., 0., 10.
+ 402, 0., 1., 10.
+ 403, 0., 2., 10.
+*NODE, NSET=B1
+ 441, 8., 0., 10.
+ 442, 8., 1., 10.
+ 443, 8., 2., 10.
+*NFILL, NSET=FILL1, BIAS=0.8
+ A1, B1, 4, 10
+*NODE, NSET=A2
+ 451, 0., 0., 12.
+*NODE, NSET=B2
+ 491, 8., 0., 12.
+*NFILL, NSET=FILL2, BIAS=1.5
+ A2, B2, 4, 10
+*NODE, NSET=A3
+ 1461, 0., 0., 14.
+*NODE, NSET=B3
+ 1469, 8., 0., 14.
+*NFILL, NSET=FILL3, TWO STEP, BIAS=0.7
+ A3, B3, 8, 1
+**
+** ---- D. *NCOPY: shift + rotation applied 3 times, reflections
+*NODE, NSET=S5
+ 501, 2., 0., 20.
+ 502, 3., 0., 20.
+ 503, 3., 1., 21.
+*NCOPY, CHANGE NUMBER=10, OLD SET=S5, NEW SET=S5ROT, SHIFT, MULTIPLE=3
+ 1., 0., 0.
+ 0., 0., 0., 0., 0., 1., 30.
+*NCOPY, CHANGE NUMBER=100, OLD SET=S5, NEW SET=S5LINE, REFLECT=LINE
+ 0., 0., 20., 1., 1., 20.
+*NCOPY, CHANGE NUMBER=200, OLD SET=S5, NEW SET=S5MIRR, REFLECT=MIRROR
+ 0., 0., 22., 1., 0., 22.
+ 0., 1., 22.5
+*NCOPY, CHANGE NUMBER=300, OLD SET=S5, NEW SET=S5PNT, REFLECT=POINT
+ 1., 2., 23.
+**
+** ---- E. *SYSTEM given by origin and one point on the local x axis only (tilted)
+*SYSTEM
+ 1., 2., 30., 2., 3., 31.
+*NODE, NSET=SYS1
+ 901, 1., 0., 0.
+ 902, 0., 1., 0.
+ 903, 0., 0., 1.
+*SYSTEM
+**
+** ---- F. spherical and cylindrical node coordinates
+*NODE, SYSTEM=S, NSET=CURV
+ 951, 2., 30., 60.
+*NODE, SYSTEM=C, NSET=CURV
+ 952, 2., 30., 51.
+**
+** ---- G. *NMAP rectangular (with scale factors) and spherical
+*NODE, NSET=NM1
+ 1001, 1., 0., 0.
+ 1002, 0., 1., 0.
+ 1003, 0., 0., 1.
+*NMAP, NSET=NM1, TYPE=RECTANGULAR
+ 1., 1., 60., 1., 2., 60.
+ 0., 1., 60.
+ 2., 1., 1.
+*NODE, NSET=NM2
+ 1101, 2., 0., 0.
+ 1102, 2., 30., 0.
+ 1103, 2., 30., 60.
+*NMAP, NSET=NM2, TYPE=SPHERICAL
+ 0., 0., 70., 0., 0., 71.
+ 1., 0., 70.
+
+**
+** ---- H. *ELCOPY of a truss chain onto copied nodes
+*NODE, NSET=TRN
+ 1201, 0., 0., 80.
+ 1202, 1., 0., 80.
+ 1203, 2., 0., 80.
+ 1204, 3., 0., 80.
+*NCOPY, CHANGE NUMBER=100, OLD SET=TRN, NEW SET=TRN2, SHIFT
+ 0., 2., 0.
+
+*ELEMENT, TYPE=T3D2, ELSET=TR
+ 1201, 1201, 1202
+ 1202, 1202, 1203
+ 1203, 1203, 1204
+*ELCOPY, OLD SET=TR, NEW SET=TR2, ELEMENT SHIFT=100, SHIFT NODES=100
+*ELSET, ELSET=TRUSSES
+ TR, TR2
+*SOLID SECTION, ELSET=TRUSSES, MATERIAL=STEEL
+ 1.E-4,
+*MATERIAL, NAME=STEEL
+*ELASTIC
+ 2.06E11, 0.3
+*DENSITY
+ 7850.,
+**
+** ---- masses on all the nodes above
+*ELEMENT, TYPE=MASS
+ 101, 101
+ 201, 201
+ 301, 301
+*ELGEN, ELSET=MASSES
+ 101, 11, 1, 1
+ 201, 11, 1, 1
+ 301, 31, 1, 1
+*ELEMENT, TYPE=MASS, ELSET=MASSES
+ 401, 401
+ 402, 402
+ 403, 403
+ 411, 411
+ 412, 412
+ 413, 413
+ 421, 421
+ 422, 422
+ 423, 423
+ 431, 431
+ 432, 432
+ 433, 433
+ 441, 441
+ 442, 442
+ 443, 443
+ 451, 451
+ 461, 461
+ 471, 471
+ 481, 481
+ 491, 491
+ 1461, 1461
+ 1462, 1462
+ 1463, 1463
+ 1464, 1464
+ 1465, 1465
+ 1466, 1466
+ 1467, 1467
+ 1468, 1468
+ 1469, 1469
+ 501, 501
+ 502, 502
+ 503, 503
+ 511, 511
+ 512, 512
+ 513, 513
+ 521, 521
+ 522, 522
+ 523, 523
+ 531, 531
+ 532, 532
+ 533, 533
+ 601, 601
+ 602, 602
+ 603, 603
+ 701, 701
+ 702, 702
+ 703, 703
+ 801, 801
+ 802, 802
+ 803, 803
+ 901, 901
+ 902, 902
+ 903, 903
+ 951, 951
+ 952, 952
+ 1001, 1001
+ 1002, 1002
+ 1003, 1003
+ 1101, 1101
+ 1102, 1102
+ 1103, 1103
+*MASS, ELSET=MASSES
+ 1.0,
+*NSET, NSET=ALLN, ELSET=MASSES
+*BOUNDARY
+ ALLN, 1, 3
+ TRN, 1, 3
+ TRN2, 1, 3
+*STEP
+*STATIC
+*CLOAD
+ 1204, 1, 1.
+*END STEP

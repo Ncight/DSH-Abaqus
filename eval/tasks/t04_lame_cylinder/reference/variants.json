@@ -1,0 +1,14 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "quarter model, CPE8R, 20 x 40 structured"},
+  {"name": "axisym", "expect": "pass", "what": "axisymmetric strip, CAX8R, axial displacement fixed at both ends"},
+  {"name": "full_ring", "expect": "pass",
+   "what": "complete ring on point supports: U contains a rigid-body shift + rotation (max |U| = 1.77e-4)"},
+  {"name": "plane_stress", "expect": "fail", "fails": ["radial_disp_inner", "plane_strain_state"],
+   "what": "CPS8R instead of plane strain (open-ended cylinder): displacement +3.15 %"},
+  {"name": "coarse", "expect": "fail", "fails": ["hoop_stress_inner", "radial_stress_inner"],
+   "what": "CAE default CPE4R, 5 x 10 elements: bore stresses 13-22 % low"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_hoop_stress_inner_Pa", "report_radial_disp_inner_m"],
+   "what": "correct ODB, result.json holds thin-wall hand numbers (p r / t)"}
+ ]
+}

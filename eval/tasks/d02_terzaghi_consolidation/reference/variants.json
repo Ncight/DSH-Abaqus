@@ -1,0 +1,26 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "2-D column, 20 CPE8RP, automatic time stepping, steps ending at t = 145 600 s and Tv = 3"},
+  {"name": "cpe4p", "expect": "pass", "what": "40 CPE4P"},
+  {"name": "c3d8p", "expect": "pass", "what": "3-D column, 20 C3D8P"},
+  {"name": "gamma_w_one", "expect": "fail", "fails": ["excess_pore_pressure_base", "settlement_at_tv"], "passes": ["final_settlement"],
+   "what": "specific weight of water 1.0: consolidation 9.8 times too fast"},
+  {"name": "gamma_w_newton", "expect": "fail", "fails": ["excess_pore_pressure_base", "settlement_at_tv", "final_settlement"],
+   "what": "specific weight 9800 in a kN model: 1000 times too slow"},
+  {"name": "k_per_day", "expect": "fail", "fails": ["excess_pore_pressure_base", "settlement_at_tv"], "passes": ["final_settlement"],
+   "what": "permeability in m/day with time in seconds"},
+  {"name": "drained_both", "expect": "fail", "fails": ["excess_pore_pressure_base", "settlement_at_tv"], "passes": ["final_settlement"],
+   "what": "base drained as well"},
+  {"name": "no_drainage", "expect": "fail", "fails": ["excess_pore_pressure_base", "settlement_at_tv", "final_settlement"],
+   "what": "no pore pressure boundary condition: nothing dissipates"},
+  {"name": "lateral_free", "expect": "fail", "fails": ["final_settlement"], "what": "sides free to move laterally"},
+  {"name": "ramp_load", "expect": "fail", "fails": ["settlement_at_tv"], "passes": ["final_settlement"],
+   "what": "surcharge ramped over the first consolidation step"},
+  {"name": "big_increments", "expect": "fail", "fails": ["settlement_at_tv"], "passes": ["final_settlement"],
+   "what": "two fixed increments up to Tv = 0.2"},
+  {"name": "short_final", "expect": "fail", "fails": ["final_settlement"], "passes": ["excess_pore_pressure_base", "settlement_at_tv"],
+   "what": "analysis stopped at Tv = 0.6"},
+  {"name": "total_reported", "expect": "fail", "fails": ["report_excess_pore_pressure_base_kPa"], "passes": ["excess_pore_pressure_base", "final_settlement"],
+   "what": "correct ODB, hydrostatic 98 kPa added to the reported base pressure"}
+ ]
+}

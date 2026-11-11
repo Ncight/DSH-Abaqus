@@ -1,0 +1,15 @@
+{
+ "id": "t03_modal_cantilever",
+ "title": "悬臂梁前三阶固有频率（模态分析）",
+ "split": "tune",
+ "job": "modal",
+ "timeout_s": 1200,
+ "tags": ["frequency", "modal", "linear", "bending", "element-choice", "3d-modes"],
+ "expected": {
+  "frequencies_Hz": [41.78, 83.55, 261.8]
+ },
+ "tolerances": {
+  "frequency_rel": 0.03,
+  "report_rel": 0.03
+ }
+}

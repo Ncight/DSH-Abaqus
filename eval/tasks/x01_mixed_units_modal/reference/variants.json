@@ -1,0 +1,21 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "3-D solid C3D20R, SI units, transverse restraint on the end faces, axial restraint at one centroid"},
+  {"name": "mm_tonne", "expect": "pass", "what": "the same solid model in mm - N - tonne (MPa, 7.85e-9 t/mm3)"},
+  {"name": "beam_b33", "expect": "pass", "what": "3-D beam model, 40 B33 elements"},
+  {"name": "density_kg_in_mm", "expect": "fail", "fails": ["frequency_1", "frequency_2"],
+   "what": "mm - MPa model with density 7850 (kg/m3): frequencies 1e-6 times too low"},
+  {"name": "density_t_in_si", "expect": "fail", "fails": ["frequency_1", "frequency_2"],
+   "what": "SI model with density 7.85e-9 (t/mm3): frequencies 1e6 times too high"},
+  {"name": "clamped", "expect": "fail", "fails": ["frequency_1", "frequency_2"],
+   "what": "both end faces fully fixed: 35.1 / 58.5 Hz"},
+  {"name": "axial_on_face", "expect": "fail", "fails": ["frequency_1", "frequency_2"],
+   "what": "axial displacement restrained on a whole end face: that end is clamped, 24.2 / 40.3 Hz"},
+  {"name": "beam_2d", "expect": "fail", "fails": ["frequency_1", "frequency_2"],
+   "what": "planar beam model: the weak-axis modes do not exist"},
+  {"name": "coarse_c3d8r", "expect": "fail", "fails": ["frequency_1"],
+   "what": "CAE default C3D8R, 2 elements across the 60 mm width"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_frequencies_Hz"],
+   "what": "correct ODB, result.json lists the two weak-axis modes 15.49 / 61.94"}
+ ]
+}

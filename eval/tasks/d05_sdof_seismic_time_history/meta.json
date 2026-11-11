@@ -1,0 +1,28 @@
+{
+ "id": "d05_sdof_seismic_time_history",
+ "title": "单层剪切框架地震时程分析：读入地震动文件（单位 g）、基底激励、相对位移与绝对加速度",
+ "suite": "domain",
+ "split": "holdout",
+ "job": "frame",
+ "timeout_s": 1800,
+ "tags": ["seismic", "time-history", "ground-motion-file", "damping", "frame", "dynamics", "domain"],
+ "expected": {
+  "peak_relative_displacement_m": 0.029150,
+  "peak_absolute_acceleration_m_s2": 3.5193,
+  "stiffness_kN_per_m": 1500.0,
+  "period_s": 0.57357,
+  "duration_s": 15.0,
+  "max_output_interval_s": 0.01,
+  "g_m_s2": 9.8,
+  "record_file": "ground_motion.at2",
+  "roof_point": [0.0, 4.0, 0.0],
+  "base_point": [0.0, 0.0, 0.0]
+ },
+ "tolerances": {
+  "probe_distance_m": 0.2,
+  "duration_slack": 0.01,
+  "interval_slack": 0.05,
+  "response_rel": 0.03,
+  "report_rel": 0.03
+ }
+}

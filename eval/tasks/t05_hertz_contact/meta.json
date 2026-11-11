@@ -1,0 +1,20 @@
+{
+ "id": "t05_hertz_contact",
+ "title": "弹性球压在刚性平面上的 Hertz 接触",
+ "split": "tune",
+ "job": "hertz",
+ "timeout_s": 1800,
+ "tags": ["static", "contact", "nonlinear", "frictionless", "local-mesh-refinement", "axisymmetric-load-convention"],
+ "expected": {
+  "contact_force_N": 500.0,
+  "max_contact_pressure_Pa": 3.7211e9,
+  "contact_radius_m": 2.5329e-4
+ },
+ "tolerances": {
+  "max_contact_pressure_rel": 0.08,
+  "contact_force_rel": 0.03,
+  "contact_radius_rel": 0.15,
+  "shear_to_pressure_max": 0.001,
+  "report_rel": 0.03
+ }
+}

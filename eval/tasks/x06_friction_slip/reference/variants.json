@@ -1,0 +1,18 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "3-D C3D8R 8x8x8 on an analytical rigid plane, penalty friction 0.3, face x = 0 pushed 1 mm"},
+  {"name": "lagrange", "expect": "pass", "what": "Lagrange-multiplier friction"},
+  {"name": "c3d20r", "expect": "pass", "what": "C3D20R 5x5x5: nodal reactions of mixed sign on the pushed face"},
+  {"name": "plane_2d", "expect": "pass", "what": "2-D plane strain CPE4R 10x10, thickness 0.1"},
+  {"name": "push_top", "expect": "pass", "what": "top face pushed instead of the side face"},
+  {"name": "discrete_rigid", "expect": "pass", "what": "plane meshed with R3D4 discrete rigid elements"},
+  {"name": "frictionless", "expect": "fail", "fails": ["sliding_force", "friction_ratio"], "passes": ["normal_force", "push_distance"], "what": "frictionless contact"},
+  {"name": "rough", "expect": "fail", "fails": ["sliding_force", "friction_ratio"], "passes": ["normal_force"], "what": "ROUGH friction without separation (bonded interface): the block is sheared, never slides"},
+  {"name": "fixed_base", "expect": "fail", "fails": ["normal_force", "sliding_force"], "passes": ["push_distance"], "what": "no contact and no rigid plane: bottom face of the block fixed, top face pushed"},
+  {"name": "small_push", "expect": "fail", "fails": ["sliding_force", "friction_ratio", "push_distance"], "passes": ["normal_force"], "what": "pushed 0.02 mm only: sticking"},
+  {"name": "mu_typo", "expect": "fail", "fails": ["sliding_force", "friction_ratio"], "passes": ["normal_force", "push_distance"], "what": "friction coefficient 0.03"},
+  {"name": "wrong_normal", "expect": "fail", "fails": ["normal_force", "sliding_force"], "passes": ["friction_ratio"], "what": "pressure 1.0e5 Pa: 1 kN instead of 10 kN"},
+  {"name": "force_below_slip", "expect": "fail", "fails": ["sliding_force", "push_distance"], "passes": ["normal_force"], "what": "pushed with a 2 kN force instead of a displacement"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_sliding_force_N"], "passes": ["sliding_force", "normal_force"], "what": "correct ODB, sliding force reported in kN"}
+ ]
+}

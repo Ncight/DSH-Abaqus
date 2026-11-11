@@ -1,0 +1,6 @@
+# DSH profile overlay: run the session on the stronger DeepSeek model (used by the failure-attribution step).
+- id: agent-default-model
+  config:
+    provider: deepseek-official
+    model: deepseek-v4-pro
+    reasoningEffort: max

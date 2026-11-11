@@ -1,0 +1,17 @@
+{
+ "id": "x04_bimetal_thermal",
+ "title": "双金属片受热弯曲（热膨胀失配 + 无应力温度 + 窄条带平面应力）",
+ "split": "tune",
+ "job": "bimetal",
+ "timeout_s": 1500,
+ "tags": ["thermal", "expansion", "bimetal", "initial-temperature", "plane-stress", "partition", "hard"],
+ "expected": {
+  "tip_deflection_m": -2.909e-3,
+  "curvature_1_per_m": 0.58182,
+  "temperature_rise_K": 100.0
+ },
+ "tolerances": {
+  "deflection_rel": 0.04,
+  "report_rel": 0.03
+ }
+}

@@ -1,0 +1,18 @@
+{
+ "id": "t02_plate_hole",
+ "title": "带中心圆孔平板单向拉伸的应力集中（平面应力）",
+ "split": "tune",
+ "job": "plate_hole",
+ "timeout_s": 1200,
+ "tags": ["static", "linear", "plane-stress", "stress-concentration", "local-mesh-refinement"],
+ "expected": {
+  "max_stress_Pa": 3.03e8,
+  "stress_concentration_factor": 3.03,
+  "nominal_stress_Pa": 1.0e8,
+  "converged_fe_max_stress_Pa": 3.037e8
+ },
+ "tolerances": {
+  "max_stress_rel": 0.04,
+  "report_rel": 0.03
+ }
+}

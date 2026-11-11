@@ -1,0 +1,25 @@
+{
+ "id": "t04_lame_cylinder",
+ "title": "厚壁圆筒受内压（平面应变，Lamé 解）",
+ "split": "tune",
+ "job": "cylinder",
+ "timeout_s": 1200,
+ "tags": ["static", "linear", "plane-strain", "pressure", "stress-at-surface", "element-choice"],
+ "expected": {
+  "hoop_stress_inner_Pa": 1.66667e8,
+  "radial_disp_inner_m": 9.0794e-5,
+  "hoop_stress_outer_Pa": 6.6667e7,
+  "radial_stress_inner_Pa": -1.0e8,
+  "hydrostatic_pressure_Pa": -2.8889e7,
+  "inner_radius_m": 0.1,
+  "plane_stress_radial_disp_m": 9.3651e-5,
+  "plane_stress_hydrostatic_pressure_Pa": -2.2222e7
+ },
+ "tolerances": {
+  "hoop_stress_inner_rel": 0.02,
+  "radial_disp_inner_rel": 0.02,
+  "radial_stress_inner_rel": 0.04,
+  "hydrostatic_pressure_rel": 0.05,
+  "report_rel": 0.03
+ }
+}

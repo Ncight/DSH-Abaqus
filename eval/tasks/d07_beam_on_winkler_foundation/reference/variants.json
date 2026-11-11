@@ -1,0 +1,20 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "160 B23 (0.25 m), grounded spring k x tributary length at every node"},
+  {"name": "b21", "expect": "pass", "what": "400 shear-flexible B21 (0.1 m), element moments extrapolated to the load"},
+  {"name": "ip_reported", "expect": "pass", "what": "default model, the largest integration-point moment reported (0.25 m cubic elements: 2 % below the nodal value)"},
+  {"name": "mesh_1m", "expect": "pass", "what": "40 B23 (1 m) with springs every 1 m, the moment extrapolated to the load node by Abaqus reported (2 % below Hetenyi)"},
+  {"name": "half_symmetry", "expect": "pass", "what": "half the beam with symmetry at the load, P/2"},
+  {"name": "foundation_keyword", "expect": "pass", "what": "*FOUNDATION on the beam elements instead of springs"},
+  {"name": "ks_no_width", "expect": "fail", "fails": ["deflection_under_load", "moment_under_load"],
+   "what": "subgrade modulus not multiplied by the beam width: deflection +15 %, moment +5 %"},
+  {"name": "spring_no_spacing", "expect": "fail", "fails": ["deflection_under_load", "moment_under_load"],
+   "what": "nodal springs not multiplied by the 0.25 m node spacing: foundation 4 times too stiff"},
+  {"name": "short_beam", "expect": "fail", "fails": ["deflection_under_load"], "what": "only 6 m of beam"},
+  {"name": "coarse_mesh", "expect": "fail", "fails": ["moment_under_load"], "what": "2 m elements and springs every 2 m: the moment at the load node is 9 % low"},
+  {"name": "b21_ip_reported", "expect": "fail", "fails": ["report_moment_under_load_kNm"], "passes": ["deflection_under_load", "moment_under_load"],
+   "what": "160 B21 (0.25 m), the largest element moment reported: one value per linear element, 8 % below the moment at the load point"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_deflection_under_load_m"], "passes": ["deflection_under_load", "moment_under_load"],
+   "what": "correct ODB, deflection reported in mm"}
+ ]
+}

@@ -1,0 +1,40 @@
+{
+ "id": "c06_cantilever_beam_elements_orientation",
+ "title": "梁单元悬臂梁端部集中力：验证截面尺寸与弯曲方向的对应关系",
+ "tags": [
+  "梁单元",
+  "B33",
+  "悬臂梁",
+  "截面方向",
+  "集中力",
+  "反力矩"
+ ],
+ "keywords": [
+  "beam",
+  "cantilever",
+  "B33",
+  "orientation",
+  "RectangularProfile",
+  "RM",
+  "tip load"
+ ],
+ "problem": "4 m 长悬臂梁，矩形截面 a=0.2 m、b=0.4 m，端部 10 kN 向下，E=206000000 kPa。",
+ "approach": [
+  "线框沿 x 轴，n1=(0,0,-1)，B33 欧拉梁单元 20 个",
+  "根部顶点 EncastreBC，端部顶点 ConcentratedForce"
+ ],
+ "lessons": [
+  "结果 0.000970874 m 与 PL³/(3EI)、I=a·b³/12 完全一致：此时受弯高度是 b",
+  "B33 不含剪切变形，适合对照欧拉梁公式；B31 会多出剪切挠度",
+  "请求 RF 即可同时得到支座反力矩 RM（这里 RM3=40 kN·m = P·L）"
+ ],
+ "verified": {
+  "tip_deflection_m": 0.000970874,
+  "theory_m": 0.000970874,
+  "root_moment_kNm": 40.0
+ },
+ "files": [
+  "model.py"
+ ],
+ "source": "seed"
+}

@@ -1,0 +1,20 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "half model 12 x 8 m, CPE8R 0.125 m around the footing, smooth footing coupled to a reference point, pushed 0.2 m"},
+  {"name": "rough", "expect": "pass", "what": "rough footing (horizontal displacement coupled as well)"},
+  {"name": "cpe8rh", "expect": "pass", "what": "hybrid elements CPE8RH"},
+  {"name": "mc_phi0", "expect": "pass", "what": "Mohr-Coulomb with phi = 0 and c = cu (Tresca)"},
+  {"name": "full_model", "expect": "pass", "what": "both halves modelled"},
+  {"name": "direct_bc", "expect": "pass", "what": "displacement prescribed on the footing nodes (rough), no reference point: load = sum of reactions"},
+  {"name": "mises_2cu", "expect": "fail", "fails": ["collapse_load"], "passes": ["plateau_reached"], "what": "Mises yield stress 2 cu: +15.5 %"},
+  {"name": "cpe4", "expect": "pass", "what": "linear CPE4, 0.125 m: 6.3 % below Prandtl (footing effectively half an element short)"},
+  {"name": "locking", "expect": "fail", "fails": ["collapse_load", "plateau_reached"], "what": "linear triangles CPE3: volumetric locking, +51 % and still climbing"},
+  {"name": "coarse_mesh", "expect": "fail", "fails": ["collapse_load"], "what": "0.5 m elements"},
+  {"name": "stop_early", "expect": "fail", "fails": ["collapse_load", "plateau_reached"], "what": "pushed 0.02 m only"},
+  {"name": "force_control", "expect": "fail", "fails": ["collapse_load", "plateau_reached"], "what": "400 kPa pressure on the footing: completes, no collapse"},
+  {"name": "axisymmetric", "expect": "fail", "fails": ["collapse_load"], "what": "axisymmetric model: circular footing"},
+  {"name": "small_domain", "expect": "fail", "fails": ["collapse_load"], "what": "soil layer 0.4 m deep on a rigid base: the failure mechanism is cut off"},
+  {"name": "elastic", "expect": "fail", "fails": ["collapse_load", "plateau_reached"], "what": "elastic soil"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_ultimate_load_kN_per_m"], "passes": ["collapse_load", "plateau_reached"], "what": "correct ODB, load of the half model reported"}
+ ]
+}

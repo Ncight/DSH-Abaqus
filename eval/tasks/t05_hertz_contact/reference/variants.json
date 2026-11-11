@@ -1,0 +1,19 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass",
+   "what": "SI model, axisymmetric CAX4, element size a/20 in the contact zone, force control"},
+  {"name": "mm_units", "expect": "pass",
+   "what": "the same model solved in N - mm - MPa (ODB in MPa, result.json in SI)"},
+  {"name": "disp_driven", "expect": "pass",
+   "what": "prescribed displacement calibrated to give 500 N (net reaction is zero, +-500 N per side)"},
+  {"name": "cax4r", "expect": "pass", "what": "same as default with CAE default CAX4R elements"},
+  {"name": "quarter3d", "expect": "pass",
+   "what": "3-D quarter model with two symmetry planes, C3D10: reaction 125 N, symmetry factor 4"},
+  {"name": "coarse", "expect": "fail", "fails": ["max_contact_pressure"],
+   "what": "global element size 0.5 mm, larger than the contact radius 0.25 mm"},
+  {"name": "per_radian_load", "expect": "fail", "fails": ["contact_force", "max_contact_pressure"],
+   "what": "axisymmetric load entered per radian: 500/(2 pi) = 79.6 N"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_max_contact_pressure_Pa"],
+   "what": "correct ODB, peak pressure reported in MPa"}
+ ]
+}

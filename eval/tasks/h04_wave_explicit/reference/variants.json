@@ -1,0 +1,17 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "C3D8R 200 x 2 x 2, step velocity, 100 output frames"},
+  {"name": "truss", "expect": "pass", "what": "200 T3D2 elements on the bar axis"},
+  {"name": "few_frames", "expect": "pass", "what": "default model with the Explicit default of 20 output frames"},
+  {"name": "ramp_velocity", "expect": "fail", "fails": ["stress_behind_front"],
+   "what": "velocity ramped linearly over the step instead of applied suddenly"},
+  {"name": "implicit", "expect": "fail", "fails": ["explicit_procedure"],
+   "what": "solved with Abaqus/Standard implicit dynamics"},
+  {"name": "wrong_duration", "expect": "fail", "fails": ["analysis_time"],
+   "what": "analysis time 1.5e-3 s: the wave has reflected several times"},
+  {"name": "pull", "expect": "fail", "fails": ["stress_behind_front"],
+   "what": "velocity applied in -x: tensile instead of compressive wave"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_stress_behind_front_Pa"],
+   "what": "correct ODB, stress reported in MPa"}
+ ]
+}

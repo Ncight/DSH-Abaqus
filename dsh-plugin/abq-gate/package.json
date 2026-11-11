@@ -1,0 +1,16 @@
+{
+  "name": "@local/abq-gate",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Abaqus workspace gate: solves must go through abq run after the analyst approves the INP in the preview panel.",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": ["index.js", "cordis.patch.yml", "locale/*.json", "icon.svg"],
+  "dsh": {
+    "bundle": { "patch": "./cordis.patch.yml" }
+  }
+}

@@ -1,0 +1,23 @@
+*HEADING
+ hand-written test: *SYSTEM whose local x axis points along global Z, no third point (degenerate projection)
+** Every node carries a MASS element, because the output database only keeps nodes that some element uses.
+*SYSTEM
+ 1., 2., 40., 1., 2., 41.
+*NODE, NSET=SYS2
+ 911, 1., 0., 0.
+ 912, 0., 1., 0.
+ 913, 0., 0., 1.
+*SYSTEM
+**
+*ELEMENT, TYPE=MASS, ELSET=MASSES
+ 911, 911
+ 912, 912
+ 913, 913
+*MASS, ELSET=MASSES
+ 1.0,
+*NSET, NSET=ALLN, ELSET=MASSES
+*BOUNDARY
+ ALLN, 1, 3
+*STEP
+*STATIC
+*END STEP

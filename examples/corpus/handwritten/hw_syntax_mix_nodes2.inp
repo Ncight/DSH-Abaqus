@@ -1,0 +1,5 @@
+** included by hw_syntax_mix_nodes.inp: the upper four nodes
+ 5, 0., 0., 1.
+ 6, 1., 0., 1.
+ 7, 1., 1., 1.
+ 8, 0., 1., 1.

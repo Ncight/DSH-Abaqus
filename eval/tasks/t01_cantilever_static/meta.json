@@ -1,0 +1,18 @@
+{
+ "id": "t01_cantilever_static",
+ "title": "三维实体悬臂梁自由端横向力静力分析",
+ "split": "tune",
+ "job": "cantilever",
+ "timeout_s": 1200,
+ "tags": ["static", "linear", "solid-3d", "bending", "element-choice", "mesh-convergence"],
+ "expected": {
+  "tip_deflection_m": 3.8392e-4,
+  "tip_deflection_euler_m": 3.8095e-4,
+  "reaction_force_N": 1000.0
+ },
+ "tolerances": {
+  "tip_deflection_range_m": [3.78e-4, 3.92e-4],
+  "reaction_force_rel": 0.01,
+  "report_rel": 0.03
+ }
+}

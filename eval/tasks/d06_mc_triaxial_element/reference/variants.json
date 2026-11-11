@@ -1,0 +1,16 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "1 m cube C3D8R, initial stress -100 kPa, static confinement step, top pushed down 5 %"},
+  {"name": "geostatic_step", "expect": "pass", "what": "confinement as a *GEOSTATIC step"},
+  {"name": "cax4r", "expect": "pass", "what": "axisymmetric specimen, one CAX4R"},
+  {"name": "associated", "expect": "pass", "what": "dilation angle 30 deg"},
+  {"name": "phi_radians", "expect": "fail", "fails": ["axial_stress_failure", "deviator_stress_failure"], "passes": ["confinement_displacement", "confining_stress"], "what": "friction angle 0.5236 (radians): 142 kPa"},
+  {"name": "no_initial_stress", "expect": "fail", "fails": ["confinement_displacement"], "passes": ["axial_stress_failure", "deviator_stress_failure"], "what": "cell pressure without initial stress: the specimen is squeezed by 1 mm in the confinement step"},
+  {"name": "tension_initial", "expect": "fail", "fails": ["confinement_displacement"], "what": "initial stress +100 kPa"},
+  {"name": "cohesion_ucs", "expect": "fail", "fails": ["axial_stress_failure", "deviator_stress_failure"], "passes": ["confinement_displacement"], "what": "unconfined strength 69.3 kPa entered as cohesion: 540 kPa"},
+  {"name": "dp_beta_phi", "expect": "fail", "fails": ["axial_stress_failure", "deviator_stress_failure"], "passes": ["confinement_displacement"], "what": "linear Drucker-Prager with beta = phi, d = c: 196 kPa"},
+  {"name": "pressure_dropped", "expect": "fail", "fails": ["confining_stress", "axial_stress_failure"], "what": "cell pressure removed in the shearing step: unconfined strength 69.3 kPa", "passes": ["confinement_displacement", "confinement_stress"]},
+  {"name": "stop_early", "expect": "fail", "fails": ["axial_strain", "deviator_stress_failure"], "passes": ["confinement_displacement"], "what": "axial strain 0.3 %: still elastic"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_axial_stress_failure_kPa"], "passes": ["axial_stress_failure", "deviator_stress_failure"], "what": "correct ODB, deviator stress reported as axial stress"}
+ ]
+}

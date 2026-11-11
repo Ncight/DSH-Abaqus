@@ -1,0 +1,20 @@
+{
+ "id": "h01_fixed_beam_udl",
+ "title": "两端固支梁受均布荷载（梁单元）",
+ "split": "holdout",
+ "job": "fixedbeam",
+ "timeout_s": 1200,
+ "tags": ["static", "linear", "beam-elements", "section-orientation", "line-load", "reaction-moment"],
+ "expected": {
+  "max_deflection_m": 3.4293e-3,
+  "max_deflection_euler_m": 3.3333e-3,
+  "total_reaction_N": 4.0e4,
+  "end_moment_Nm": 1.3333e4
+ },
+ "tolerances": {
+  "max_deflection_range_m": [3.30e-3, 3.46e-3],
+  "total_reaction_rel": 0.01,
+  "end_moment_rel": 0.03,
+  "report_rel": 0.03
+ }
+}

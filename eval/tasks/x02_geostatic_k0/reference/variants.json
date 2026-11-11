@@ -1,0 +1,20 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "2-D plane-strain strip, CPE4 2 x 20, initial stress with K0 = nu/(1-nu), geostatic step"},
+  {"name": "column3d", "expect": "pass", "what": "3-D column, C3D8R, vertical axis Z"},
+  {"name": "static_step", "expect": "pass", "what": "equilibrium found in an ordinary static step"},
+  {"name": "coarse", "expect": "pass", "what": "only 4 elements over the 20 m depth (stress points 1 m above the base)"},
+  {"name": "gravity_only", "expect": "fail", "fails": ["max_displacement"], "passes": ["vertical_stress", "k0_ratio"],
+   "what": "gravity without initial stress: correct stresses but 87 mm settlement"},
+  {"name": "no_gravity", "expect": "fail", "fails": ["max_displacement", "vertical_stress"],
+   "what": "initial stress without gravity: the layer heaves, the stress relaxes to zero"},
+  {"name": "wrong_k0", "expect": "fail", "fails": ["k0_ratio"], "passes": ["max_displacement", "vertical_stress"],
+   "what": "K0 = 1.0: no displacement in a confined column, only the stress ratio is wrong"},
+  {"name": "stiff_gravity_only", "expect": "fail", "fails": ["max_displacement"],
+   "what": "gravity only with E = 3.0e7: settles 8.7e-5 m (why the bound is 1e-5 m)"},
+  {"name": "si_units", "expect": "fail", "fails": ["vertical_stress"], "passes": ["max_displacement", "k0_ratio"],
+   "what": "correct procedure in N / Pa / kg: stresses 1000 times larger"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_vertical_stress_base_kPa"],
+   "what": "correct ODB, stresses reported in Pa"}
+ ]
+}

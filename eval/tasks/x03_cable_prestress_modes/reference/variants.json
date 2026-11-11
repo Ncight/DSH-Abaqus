@@ -1,0 +1,19 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "3-D beam model, 100 B31, tension force at a sliding end, NLGEOM pretension step, 10 modes"},
+  {"name": "planar_b21", "expect": "pass", "what": "2-D beam model, 100 B21"},
+  {"name": "truss_initial_stress", "expect": "pass", "what": "100 T3D2, pretension as initial stress, both ends pinned"},
+  {"name": "no_nlgeom", "expect": "fail", "fails": ["frequency_1", "frequency_2", "frequency_3"], "passes": ["tension"],
+   "what": "pretension step without NLGEOM: no stress stiffening, only bending frequencies"},
+  {"name": "no_prestress", "expect": "fail", "fails": ["frequency_1", "tension"],
+   "what": "frequency step on the unstressed wire"},
+  {"name": "wrong_tension", "expect": "fail", "fails": ["frequency_1", "tension"],
+   "what": "80 kN instead of 20 kN: frequencies doubled"},
+  {"name": "wrong_density", "expect": "fail", "fails": ["frequency_1"], "passes": ["tension"],
+   "what": "density 7.85 instead of 7850"},
+  {"name": "coarse", "expect": "fail", "fails": ["frequency_3"], "passes": ["tension"],
+   "what": "only 6 B31 elements"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_frequencies_Hz"],
+   "what": "correct ODB, result.json lists a duplicate pair as two different modes"}
+ ]
+}

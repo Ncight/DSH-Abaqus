@@ -1,0 +1,21 @@
+{
+ "id": "x02_geostatic_k0",
+ "title": "水平土层的初始地应力平衡（K0 状态，m–t–s 单位制）",
+ "split": "tune",
+ "job": "geostatic",
+ "timeout_s": 1500,
+ "tags": ["geostatic", "initial-stress", "gravity", "unit-system", "soil", "hard"],
+ "expected": {
+  "max_displacement_m": 0.0,
+  "vertical_stress_base_kPa": -352.8,
+  "horizontal_stress_base_kPa": -151.2,
+  "k0": 0.428571,
+  "settlement_without_initial_stress_m": 0.08736
+ },
+ "tolerances": {
+  "max_displacement_m": 1.0e-5,
+  "vertical_stress_rel": 0.04,
+  "k0_rel": 0.05,
+  "report_rel": 0.05
+ }
+}

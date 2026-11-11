@@ -1,0 +1,993 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Abaqus 前处理预览</title>
+<link rel="icon" href="data:,">
+<style>
+  html, body { height: 100%; margin: 0; }
+  body { font: 12px Tahoma, "Microsoft YaHei", sans-serif; color: #000; background: #f0f0f0;
+         display: flex; flex-direction: column; overflow: hidden; }
+  button, select, input, textarea { font: inherit; }
+  #ctx { flex: 0 0 auto; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; padding: 4px 8px;
+         background: #f0f0f0; border-bottom: 1px solid #a0a0a0; position: relative; }
+  #ctx label { white-space: nowrap; }
+  #ctx select, #ctx button { height: 22px; }
+  #ctx button, .btn { min-width: 26px; padding: 0 6px; background: #e1e1e1; border: 1px solid #adadad; cursor: pointer; }
+  #ctx button:hover, .btn:hover { background: #e5f1fb; border-color: #0078d7; }
+  #ctx button.on { background: #cce4f7; border-color: #0078d7; }
+  #ctx .sep { width: 1px; height: 18px; background: #a0a0a0; }
+  #fileSel { max-width: 300px; }
+  #more { display: contents; }
+  #moreBtn { display: none; }
+  #main { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 330px 1fr; position: relative; }
+  body.collapsed #main { grid-template-columns: 0 1fr; }
+  body.collapsed #left { display: none; }
+  #left { display: flex; flex-direction: column; border-right: 1px solid #a0a0a0; min-height: 0; min-width: 0; background: #f0f0f0; }
+  #tabs { display: flex; flex: 0 0 auto; padding: 3px 3px 0; gap: 2px; border-bottom: 1px solid #a0a0a0; }
+  #tabs div { padding: 3px 10px; border: 1px solid #a0a0a0; border-bottom: none; background: #e1e1e1; cursor: pointer; }
+  #tabs div.on { background: #fff; position: relative; top: 1px; }
+  .badge { display: inline-block; min-width: 14px; padding: 0 3px; margin-left: 4px; border-radius: 7px; color: #fff;
+           background: #c00000; font-size: 11px; text-align: center; }
+  .badge.warn { background: #c87800; } .badge.ok { background: #2e8b2e; }
+  #tree, #checks { flex: 1 1 auto; overflow: auto; background: #fff; padding: 4px; min-height: 0; }
+  #checks { display: none; }
+  #tree details { margin-left: 14px; }
+  #tree > details { margin-left: 0; }
+  #tree summary { cursor: default; white-space: nowrap; padding: 1px 2px; }
+  #tree summary .cnt { color: #666; }
+  #tree .leaf { margin-left: 28px; padding: 1px 4px; white-space: nowrap; cursor: default; }
+  #tree .leaf:hover { background: #e5f3ff; }
+  #tree .leaf.sel { background: #3399ff; color: #fff; }
+  #tree .leaf .dim { color: #777; } #tree .leaf.sel .dim { color: #dbeaff; }
+  #tree .empty { margin-left: 28px; color: #999; }
+  .chk { padding: 3px 4px; border-bottom: 1px solid #eee; position: relative; padding-right: 40px; }
+  .chk b { display: inline-block; width: 38px; }
+  .chk.error b { color: #c00000; } .chk.warn b { color: #c87800; } .chk.info b { color: #0050a0; } .chk.ok b { color: #2e8b2e; }
+  #propHead { flex: 0 0 auto; padding: 3px 6px; background: #dcdcdc; border-top: 1px solid #a0a0a0; border-bottom: 1px solid #a0a0a0; font-weight: bold;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #prop { flex: 0 0 34%; overflow: auto; background: #fff; }
+  #prop table { border-collapse: collapse; width: 100%; }
+  #prop td { border-bottom: 1px solid #eee; padding: 2px 6px; vertical-align: top; }
+  #prop td:first-child { color: #333; background: #f7f7f7; width: 38%; white-space: nowrap; }
+  #prop td.v { position: relative; padding-right: 40px; word-break: break-all; }
+  .ann { position: absolute; right: 2px; top: 1px; height: 17px; line-height: 14px; padding: 0 4px; font-size: 11px; color: #0050a0;
+         background: #eef5fc; border: 1px solid #9fc3e6; cursor: pointer; opacity: .45; }
+  tr:hover .ann, .chk:hover .ann, .ann:focus { opacity: 1; }
+  .ann.done { color: #fff; background: #c87800; border-color: #c87800; opacity: 1; }
+  #vpWrap { position: relative; min-width: 0; min-height: 0; border: 3px solid #000080; display: flex; flex-direction: column; }
+  #vpTitle { background: #000080; color: #fff; font-weight: bold; text-align: center; padding: 1px 4px 3px;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #rvBar { display: flex; flex-wrap: wrap; align-items: center; gap: 3px 6px; padding: 3px 6px; background: #e9e9e9; border-bottom: 1px solid #a0a0a0; }
+  #rvBar .btn { height: 22px; }
+  #rvState { padding: 2px 8px; border-radius: 3px; color: #fff; font-weight: bold; background: #808080; white-space: nowrap; }
+  #rvState.approved { background: #2e8b2e; } #rvState.rejected { background: #c00000; } #rvState.stale { background: #d07000; }
+  #rvApprove { color: #1d6b1d; font-weight: bold; } #rvReject { color: #a00000; font-weight: bold; }
+  #rvBar .btn:disabled { color: #999; cursor: default; background: #ececec; border-color: #ccc; }
+  #rvInfo { color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 60px; }
+  #rvPanel { position: absolute; z-index: 12; left: 0; right: 0; top: 0; max-height: 62%; overflow: auto; background: #fbfbfb; border-bottom: 2px solid #000080;
+             box-shadow: 0 4px 10px rgba(0,0,0,.35); padding: 6px 8px; display: none; }
+  #rvPanel.open { display: block; }
+  #rvPanel h4 { margin: 4px 0 3px; font-size: 12px; } #rvPanel h4 span { font-weight: normal; color: #666; }
+  #rvNote { width: 100%; box-sizing: border-box; min-height: 40px; resize: vertical; }
+  .cm { border: 1px solid #d0d0d0; background: #fff; margin: 3px 0; padding: 3px 5px; display: grid; grid-template-columns: 1fr auto; gap: 2px 6px; }
+  .cm .t { font-weight: bold; word-break: break-all; } .cm .c { color: #555; word-break: break-all; grid-column: 1 / 3; }
+  .cm input { grid-column: 1 / 3; box-sizing: border-box; width: 100%; height: 22px; }
+  .cm .del { height: 18px; line-height: 14px; padding: 0 5px; }
+  .cm.old { background: #f4f4f4; } .cm.old .n { grid-column: 1 / 3; color: #7a3b00; }
+  #rvPrev { color: #444; margin-top: 4px; }
+  #modal { position: absolute; z-index: 30; inset: 0; background: rgba(0,0,0,.35); display: none; align-items: center; justify-content: center; }
+  #modal.open { display: flex; }
+  #modal .box { background: #f0f0f0; border: 1px solid #000080; box-shadow: 0 6px 20px rgba(0,0,0,.5); width: min(92%, 460px); }
+  #modal .hd { background: #000080; color: #fff; font-weight: bold; padding: 3px 8px; }
+  #modal .bd { padding: 10px; max-height: 50vh; overflow: auto; line-height: 18px; }
+  #modal .bd ul { margin: 4px 0; padding-left: 18px; color: #a00000; }
+  #modal .ft { padding: 6px 10px 10px; text-align: right; } #modal .ft .btn { height: 24px; min-width: 70px; margin-left: 6px; }
+  #modal textarea { width: 100%; box-sizing: border-box; height: 180px; font: 12px Consolas, monospace; }
+  #vp { position: relative; flex: 1 1 auto; min-height: 0; background: linear-gradient(#1b2d46, #a3b1c6); }
+  #vp canvas.main { display: block; width: 100%; height: 100%; }
+  #triad { position: absolute; left: 6px; bottom: 6px; width: 96px; height: 96px; pointer-events: none; }
+  #legend { position: absolute; left: 10px; top: 10px; color: #fff; text-shadow: 0 0 2px #000; line-height: 17px; max-height: 70%; overflow: hidden; }
+  #legend i { display: inline-block; width: 12px; height: 12px; margin-right: 6px; border: 1px solid #000; vertical-align: -2px; }
+  #alerts { position: absolute; right: 10px; top: 10px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px; max-width: 70%; }
+  #alerts div { padding: 3px 8px; color: #fff; cursor: pointer; display: none; }
+  #alert { background: #c00000; } #partial { background: #b06000; }
+  #symLegend { position: absolute; right: 10px; bottom: 8px; color: #fff; text-shadow: 0 0 2px #000; text-align: right; line-height: 16px; }
+  #big { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; }
+  #big.open { display: flex; }
+  #big .box { background: #f0f0f0; border: 1px solid #000080; width: min(92%, 440px); padding: 12px 14px; line-height: 19px; box-shadow: 0 6px 20px rgba(0,0,0,.5); }
+  #big h3 { margin: 0 0 6px; font-size: 13px; color: #a04000; }
+  #big .btn { height: 26px; margin-top: 8px; }
+  #big .why { color: #a00000; margin-top: 6px; }
+  #msg { flex: 0 0 84px; overflow: auto; background: #fff; border-top: 1px solid #a0a0a0; padding: 3px 8px;
+         font-family: Consolas, "Microsoft YaHei", monospace; white-space: pre-wrap; }
+  #msg .err { color: #c00000; }
+  /* narrow pane (sidebar browser): the tree becomes a drawer, secondary controls fold away */
+  body.narrow #main { grid-template-columns: 1fr; }
+  body.narrow #left { position: absolute; z-index: 20; left: 0; top: 0; bottom: 0; width: min(88%, 340px); box-shadow: 4px 0 12px rgba(0,0,0,.4); }
+  body.narrow #msg { flex-basis: 46px; }
+  body.narrow #fileSel { max-width: 150px; }
+  body.narrow #moreBtn { display: inline-block; }
+  body.narrow #more { display: none; position: absolute; z-index: 25; right: 4px; top: 100%; background: #f0f0f0; border: 1px solid #808080;
+                      box-shadow: 0 4px 10px rgba(0,0,0,.35); padding: 6px 8px; flex-direction: column; align-items: flex-start; gap: 5px; }
+  body.narrow #more.open { display: flex; }
+  body.narrow #more .sep { display: none; }
+  body.narrow #ctx .wide { display: none; }
+  body.narrow #triad { width: 72px; height: 72px; }
+</style>
+<script type="importmap">{ "imports": { "three": "/static/three.module.js" } }</script>
+</head>
+<body>
+<div id="ctx">
+  <button id="treeBtn" title="显示 / 隐藏模型树">☰ 模型树</button>
+  <label class="wide">模块: <select disabled><option>预览 (只读)</option></select></label>
+  <label><span class="wide">模型: </span><select id="fileSel"></select></label>
+  <label><span class="wide">分析步: </span><select id="stepSel"></select></label>
+  <span id="views">
+    <button data-v="front" title="前视">前</button><button data-v="back" title="后视">后</button>
+    <button data-v="top" title="俯视">顶</button><button data-v="bottom" title="仰视">底</button>
+    <button data-v="left" title="左视">左</button><button data-v="right" title="右视">右</button>
+    <button data-v="iso" title="等轴测">Iso</button><button data-v="fit" title="充满视口">适应</button>
+  </span>
+  <button id="moreBtn" title="显示选项">显示 ▾</button>
+  <span id="more">
+    <span class="sep"></span>
+    <label>着色: <select id="colorSel">
+      <option value="none">默认</option><option value="inst">按实例</option>
+      <option value="mat">按材料</option><option value="sec">按截面</option></select></label>
+    <label><input type="checkbox" id="edgeChk" checked>网格线</label>
+    <label><input type="checkbox" id="symChk" checked>边界/载荷符号</label>
+    <label><input type="checkbox" id="intChk">内部集</label>
+    <label><input type="checkbox" id="followChk" checked>跟随最新文件</label>
+    <label>竖直轴: <select id="upSel"><option value="y">Y</option><option value="z">Z</option></select></label>
+  </span>
+</div>
+<div id="main">
+  <div id="left">
+    <div id="tabs"><div id="tabTree" class="on">模型</div><div id="tabChk">体检<span id="chkBadge" class="badge ok">0</span></div></div>
+    <div id="tree"></div>
+    <div id="checks"></div>
+    <div id="propHead">属性</div>
+    <div id="prop"></div>
+  </div>
+  <div id="vpWrap">
+    <div id="vpTitle">Viewport: 1</div>
+    <div id="rvBar">
+      <span id="rvState">未审查</span>
+      <button id="rvApprove" class="btn" disabled>批准求解</button>
+      <button id="rvReject" class="btn" disabled>退回修改</button>
+      <button id="rvToggle" class="btn" title="总体意见与逐项标注">标注 <b id="rvCount">0</b> ▾</button>
+      <button id="rvCopy" class="btn" title="把审查意见单 (与 .md 文件相同的文字) 复制到剪贴板">复制修改指令</button>
+      <span id="rvInfo"></span>
+    </div>
+    <div id="vp">
+      <div id="rvPanel">
+        <h4>总体意见 <span>(可选, 写给建模 Agent)</span></h4>
+        <textarea id="rvNote" placeholder="例如: 载荷方向反了; 网格在孔边再加密一倍"></textarea>
+        <h4>逐项标注 <span>在左侧“属性”或“体检”里点某一行右边的“标注”, 这里只需填应该改成什么</span></h4>
+        <div id="rvList"></div>
+        <div id="rvPrev"></div>
+      </div>
+      <div id="legend"></div>
+      <div id="alerts"><div id="alert"></div><div id="partial"></div></div>
+      <div id="symLegend"></div>
+      <canvas id="triad"></canvas>
+      <div id="big"><div class="box"><h3 id="bigTitle"></h3><div id="bigText"></div>
+        <button id="bigBtn" class="btn"></button><div id="bigWhy" class="why"></div></div></div>
+    </div>
+    <div id="modal"><div class="box"><div class="hd" id="mdTitle"></div><div class="bd" id="mdBody"></div>
+      <div class="ft"><button id="mdCancel" class="btn">取消</button><button id="mdOk" class="btn">确定</button></div></div></div>
+  </div>
+</div>
+<div id="msg"></div>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from '/static/OrbitControls.js';
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const enc = encodeURIComponent;
+const DOF = ['', 'U1', 'U2', 'U3', 'UR1', 'UR2', 'UR3', 'WARP', 'POR', '', '', 'NT11'];
+const PALETTE = ['#3cb5a0', '#e6853c', '#5b8fd6', '#d6c84a', '#b56bd0', '#6cc04a', '#d65b7a', '#47c4d6',
+                 '#a08060', '#8f9bd6', '#d69a5b', '#5bd6a0'];
+const DEFAULT_COLOR = '#3cb5a0', UNASSIGNED = '#8c8c8c', RIGID = '#c9ccd4', HILITE = 0xff0000;
+
+// numbers: never scientific notation; 4 decimals, or 4 significant digits for tiny values
+function fmt(v) {
+  const x = typeof v === 'number' ? v : Number(v);
+  if (v === '' || v === null || v === undefined || !isFinite(x)) return String(v ?? '');
+  if (x === 0) return '0.0000';
+  const a = Math.abs(x);
+  if (a >= 1e-4) return x.toFixed(4);
+  return x.toFixed(Math.min(20, 3 - Math.floor(Math.log10(a))));
+}
+const fmtTok = t => (t !== '' && /^[-+]?(\d+\.?\d*|\.\d+)([eEdD][-+]?\d+)?$/.test(t) && /[.eEdD]/.test(t)) ? fmt(Number(t.replace(/[dD]/, 'e'))) : t;
+const rowTxt = r => r.filter((t, i) => t !== '' || i < r.length - 1).map(fmtTok).join(', ');
+const paramTxt = p => Object.entries(p || {}).map(([k, v]) => v === true ? k.toLowerCase() : k.toLowerCase() + '=' + v).join(', ');
+
+function log(s, err) {
+  const d = document.createElement('div');
+  if (err) d.className = 'err';
+  d.textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false }) + '  ' + s;
+  $('msg').appendChild(d);
+  while ($('msg').childNodes.length > 200) $('msg').removeChild($('msg').firstChild);
+  $('msg').scrollTop = $('msg').scrollHeight;
+}
+async function api(url, opt) {
+  const r = await fetch(url, opt);
+  let j;
+  try { j = await r.json(); } catch (e) { const er = new Error('HTTP ' + r.status); er.status = r.status; throw er; }
+  if (j && j.error) { const er = new Error(j.error); er.status = r.status; throw er; }
+  return j;
+}
+
+// ---------------------------------------------------------------- layout: drawer / narrow pane
+const NARROW = 760;
+let narrow = null;
+function layout() {
+  const n = document.body.clientWidth < NARROW;
+  if (n !== narrow) {
+    narrow = n;
+    document.body.classList.toggle('narrow', n);
+    document.body.classList.toggle('collapsed', n);      // a narrow pane starts with the tree folded away
+    $('more').classList.remove('open');
+  }
+  $('treeBtn').classList.toggle('on', !document.body.classList.contains('collapsed'));
+}
+new ResizeObserver(layout).observe(document.body);
+$('treeBtn').onclick = () => { document.body.classList.toggle('collapsed'); layout(); };
+$('moreBtn').onclick = () => $('more').classList.toggle('open');
+
+// ---------------------------------------------------------------- three.js scene
+const vp = $('vp');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.domElement.className = 'main';
+renderer.setPixelRatio(window.devicePixelRatio);
+vp.insertBefore(renderer.domElement, vp.firstChild);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(30, 1, 0.01, 1000);
+scene.add(camera);
+scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+const head = new THREE.DirectionalLight(0xffffff, 1.6);
+head.position.set(0.4, 0.7, 1);
+camera.add(head);
+let controls = null;
+const gModel = new THREE.Group(), gHi = new THREE.Group(), gSym = new THREE.Group();
+scene.add(gModel, gHi, gSym);
+let center = new THREE.Vector3(), diag = 1, dirty = true, box = null;
+const halfRes = new THREE.Vector2(1, 1);            // half the viewport size in px (for the wide lines)
+
+function makeControls() {
+  const tgt = controls ? controls.target.clone() : center.clone();
+  if (controls) controls.dispose();
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.copy(tgt);
+  controls.rotateSpeed = 0.9;
+  controls.addEventListener('change', () => { dirty = true; });
+  controls.update();
+}
+function upVec() { return $('upSel').value === 'z' ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0); }
+// Distance from the model centre (looking back along dir) at which the model box just fills the view:
+// each corner of the box needs its own distance, the largest one wins.  Some room is left for the symbols.
+function fitDistance(dir) {
+  const sphere = diag * 0.5 / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2)) / Math.min(1, camera.aspect || 1);
+  if (!box) return sphere * 1.08;
+  const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)), tanH = tanV * (camera.aspect || 1);
+  const right = new THREE.Vector3().crossVectors(camera.up, dir);
+  if (right.lengthSq() < 1e-12) right.crossVectors(new THREE.Vector3(1, 0, 0), dir);
+  if (right.lengthSq() < 1e-12) right.crossVectors(new THREE.Vector3(0, 1, 0), dir);
+  right.normalize();
+  const up = new THREE.Vector3().crossVectors(dir, right), r = new THREE.Vector3();
+  let d = 0;
+  for (let i = 0; i < 8; i++) {
+    r.set(box[i & 1][0], box[(i >> 1) & 1][1], box[(i >> 2) & 1][2]).sub(center);
+    const z = r.dot(dir);
+    d = Math.max(d, z + Math.abs(r.dot(right)) / tanH, z + Math.abs(r.dot(up)) / tanV);
+  }
+  return isFinite(d) && d > diag * 1e-6 ? Math.min(d * 1.15, sphere * 1.08) : sphere * 1.08;
+}
+function setView(name) {
+  const zUp = $('upSel').value === 'z';
+  const D = zUp
+    ? { front: [0, -1, 0], back: [0, 1, 0], top: [0, 0, 1], bottom: [0, 0, -1], left: [-1, 0, 0], right: [1, 0, 0], iso: [1, -1, 0.8] }
+    : { front: [0, 0, 1], back: [0, 0, -1], top: [0, 1, 0], bottom: [0, -1, 0], left: [-1, 0, 0], right: [1, 0, 0], iso: [1, 0.8, 1] };
+  let dir;
+  if (name === 'fit') dir = camera.position.clone().sub(controls.target).normalize();
+  else dir = new THREE.Vector3(...D[name]).normalize();
+  camera.up.copy(upVec());
+  if (name === 'top' || name === 'bottom') camera.up.copy(zUp ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, -1));
+  const dist = fitDistance(dir);
+  camera.position.copy(center).addScaledVector(dir, dist);
+  camera.near = dist / 400; camera.far = dist + diag * 50;
+  camera.updateProjectionMatrix();
+  makeControls();
+  controls.target.copy(center);
+  controls.update();
+  dirty = true;
+}
+function resize() {
+  const w = vp.clientWidth, h = vp.clientHeight;
+  if (!w || !h) return;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  halfRes.set(w / 2, h / 2);
+  dirty = true;
+}
+new ResizeObserver(resize).observe(vp);
+
+// triad (bottom-left, like the CAE view triad)
+const triR = new THREE.WebGLRenderer({ canvas: $('triad'), antialias: true, alpha: true });
+triR.setPixelRatio(window.devicePixelRatio);
+triR.setSize(96, 96, false);
+const triS = new THREE.Scene(), triC = new THREE.OrthographicCamera(-1.5, 1.5, 1.5, -1.5, 0.1, 20);
+function label(txt, color) {
+  const c = document.createElement('canvas'); c.width = 64 * Math.max(1, txt.length * 0.62); c.height = 64;
+  const g = c.getContext('2d'); g.font = 'bold 44px Tahoma'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.strokeStyle = '#000'; g.lineWidth = 5; g.strokeText(txt, c.width / 2, 32); g.fillStyle = color || '#fff'; g.fillText(txt, c.width / 2, 32);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthTest: false }));
+  s.scale.set(0.5 * c.width / 64, 0.5, 1);
+  return s;
+}
+[[1, 0, 0, 0xd02020, 'X'], [0, 1, 0, 0x20b020, 'Y'], [0, 0, 1, 0x2030d0, 'Z']].forEach(([x, y, z, col, t]) => {
+  const d = new THREE.Vector3(x, y, z);
+  triS.add(new THREE.ArrowHelper(d, new THREE.Vector3(), 1, col, 0.32, 0.18));
+  const s = label(t); s.position.copy(d).multiplyScalar(1.28); triS.add(s);
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  if (!dirty) return;
+  dirty = false;
+  renderer.render(scene, camera);
+  if (controls) {
+    triC.position.copy(camera.position).sub(controls.target).normalize().multiplyScalar(5);
+    triC.up.copy(camera.up); triC.lookAt(0, 0, 0);
+    triR.render(triS, triC);
+  }
+}
+animate();
+
+function clearGroup(g) {
+  while (g.children.length) {
+    const o = g.children.pop();
+    o.geometry && o.geometry.dispose();
+    if (o.material) { o.material.map && o.material.map.dispose(); o.material.dispose(); }
+    else if (o.dispose) o.dispose();          // helpers such as ArrowHelper
+  }
+  dirty = true;
+}
+
+// Lines a few pixels wide (WebGL lines are 1 px): every segment is a screen-aligned quad.
+// seg: flat [x0,y0,z0, x1,y1,z1, ...]; colors: optional rgb per segment end, same layout.
+function wideLines(seg, width, color, colors, depthTest) {
+  const n = seg.length / 6;
+  const a = new Float32Array(n * 18), b = new Float32Array(n * 18), sel = new Float32Array(n * 12);
+  const col = colors ? new Float32Array(n * 18) : null;
+  const SEL = [0, -1, 0, 1, 1, 1, 0, -1, 1, 1, 1, -1];        // (which end, which side) for the 6 corners
+  for (let i = 0; i < n; i++) for (let v = 0; v < 6; v++) {
+    const o = i * 18 + v * 3, end = SEL[v * 2];
+    for (let k = 0; k < 3; k++) {
+      a[o + k] = seg[i * 6 + k]; b[o + k] = seg[i * 6 + 3 + k];
+      if (col) col[o + k] = colors[i * 6 + end * 3 + k];
+    }
+    sel[i * 12 + v * 2] = end; sel[i * 12 + v * 2 + 1] = SEL[v * 2 + 1];
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(a, 3));
+  geo.setAttribute('other', new THREE.BufferAttribute(b, 3));
+  geo.setAttribute('sel', new THREE.BufferAttribute(sel, 2));
+  if (col) geo.setAttribute('acolor', new THREE.BufferAttribute(col, 3));
+  const mat = new THREE.ShaderMaterial({
+    uniforms: { halfRes: { value: halfRes }, width: { value: width }, ucolor: { value: new THREE.Color(color === undefined ? 0xffffff : color) } },
+    vertexShader: `
+      attribute vec3 other; attribute vec2 sel; ${col ? 'attribute vec3 acolor;' : ''}
+      uniform vec2 halfRes; uniform float width; uniform vec3 ucolor; varying vec3 vColor;
+      void main() {
+        vec4 p0 = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        vec4 p1 = projectionMatrix * modelViewMatrix * vec4(other, 1.0);
+        vec2 s0 = p0.xy / max(p0.w, 1e-6) * halfRes, s1 = p1.xy / max(p1.w, 1e-6) * halfRes;
+        vec2 d = s1 - s0; float len = length(d);
+        vec2 dir = len > 1e-6 ? d / len : vec2(1.0, 0.0);
+        vec4 p = mix(p0, p1, sel.x);
+        p.xy += vec2(-dir.y, dir.x) * sel.y * width / halfRes * p.w;
+        gl_Position = p;
+        vColor = ${col ? 'acolor' : 'ucolor'};
+      }`,
+    fragmentShader: `varying vec3 vColor; void main() { gl_FragColor = vec4(vColor, 1.0);
+      #include <colorspace_fragment>
+    }`,
+    side: THREE.DoubleSide, depthTest: depthTest !== false,
+  });
+  const m = new THREE.Mesh(geo, mat);
+  m.frustumCulled = false;
+  return m;
+}
+function crossTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 32;
+  const g = c.getContext('2d');
+  for (const [w, col] of [[7, '#000'], [3.5, '#ffe000']]) {
+    g.strokeStyle = col; g.lineWidth = w; g.lineCap = 'round';
+    g.beginPath(); g.moveTo(6, 6); g.lineTo(26, 26); g.moveTo(26, 6); g.lineTo(6, 26); g.stroke();
+  }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+// ---------------------------------------------------------------- model
+let M = null, curPath = null, faceMesh = null, edgeLines = null, beamLines = null, selLeaf = null;
+
+function colorOf(mode, i) {
+  if (i === -2) return RIGID;
+  if (mode === 'none') return DEFAULT_COLOR;
+  return i < 0 ? UNASSIGNED : PALETTE[i % PALETTE.length];
+}
+function applyColors() {
+  if (!M) return;
+  const mode = $('colorSel').value, g = M.geom, c = new THREE.Color();
+  const pick = (kind, k) => {
+    if (g[kind + 'Sec'][k] === -2) return -2;                 // rigid body / analytical surface / display body
+    return mode === 'inst' ? g[kind + 'Inst'][k] - 1 : mode === 'mat' ? g[kind + 'Mat'][k] : mode === 'sec' ? g[kind + 'Sec'][k] : 0;
+  };
+  let rigid = false;
+  if (faceMesh) {
+    const col = faceMesh.geometry.attributes.color;
+    for (let t = 0; t < g.tris.length / 3; t++) {
+      const i = pick('tri', t); if (i === -2) rigid = true;
+      c.set(colorOf(mode, i));
+      for (let k = 0; k < 3; k++) col.setXYZ(t * 3 + k, c.r, c.g, c.b);
+    }
+    col.needsUpdate = true;
+  }
+  if (beamLines) {
+    const col = beamLines.geometry.attributes.acolor;
+    for (let t = 0; t < g.lines.length / 2; t++) {
+      const i = pick('line', t); if (i === -2) rigid = true;
+      c.set(colorOf(mode, i));
+      for (let k = 0; k < 6; k++) col.setXYZ(t * 6 + k, c.r, c.g, c.b);
+    }
+    col.needsUpdate = true;
+  }
+  let names = [];
+  if (mode === 'inst') names = M.instances.length ? M.instances.map(i => i.name) : ['(无实例)'];
+  if (mode === 'mat') names = M.materials.map(m => m.name);
+  if (mode === 'sec') names = M.sections.map(s => (s.material || s.type) + ' / ' + s.elset);
+  let html = names.slice(0, 24).map((n, i) => `<div><i style="background:${PALETTE[i % PALETTE.length]}"></i>${esc(n)}</div>`).join('');
+  if (names.length > 24) html += `<div>… 共 ${names.length} 项</div>`;
+  if (mode === 'mat' || mode === 'sec') html += `<div><i style="background:${UNASSIGNED}"></i>未赋${mode === 'mat' ? '材料' : '截面'}</div>`;
+  if (rigid) html += `<div><i style="background:${RIGID}"></i>刚体 / 解析刚性面 (无需截面)</div>`;
+  $('legend').innerHTML = html;
+  dirty = true;
+}
+
+function buildScene(keepView) {
+  clearGroup(gModel); clearGroup(gHi); clearGroup(gSym);
+  faceMesh = edgeLines = beamLines = null;
+  const g = M.geom, pos = g.pos;
+  const b = box = M.stats.viewBbox || M.stats.bbox;
+  center.set((b[0][0] + b[1][0]) / 2, (b[0][1] + b[1][1]) / 2, (b[0][2] + b[1][2]) / 2);
+  diag = Math.hypot(b[1][0] - b[0][0], b[1][1] - b[0][1], b[1][2] - b[0][2]) || 1;
+  const gather = idx => {
+    const n = idx.length, p = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { const k = idx[i] * 3; p[i * 3] = pos[k]; p[i * 3 + 1] = pos[k + 1]; p[i * 3 + 2] = pos[k + 2]; }
+    return p;
+  };
+  if (g.tris.length) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(gather(g.tris), 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(g.tris.length * 3), 3));
+    geo.computeVertexNormals();
+    faceMesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide,
+      polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
+    gModel.add(faceMesh);
+  }
+  if (g.edges.length) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(gather(g.edges), 3));
+    edgeLines = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({ color: 0x000000 }));
+    gModel.add(edgeLines); edgeLines.visible = $('edgeChk').checked;
+  }
+  if (g.lines.length) {                    // beams, trusses, connectors, 2-D rigid surfaces: wide lines
+    beamLines = wideLines(gather(g.lines), 1.6, 0xffffff, new Float32Array(g.lines.length * 3));
+    gModel.add(beamLines);
+  }
+  if (g.points.length) {
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(gather(g.points), 3));
+    gModel.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0x00ffff, size: 7, sizeAttenuation: false })));
+  }
+  const orphans = g.orphans || [];
+  if (orphans.length) {
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(orphans), 3));
+    gModel.add(new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xe0e0e0, size: 3, sizeAttenuation: false })));
+  }
+  const refs = g.refPoints || [];
+  if (refs.length) {                       // reference points: yellow crosses, as in CAE
+    const p = new Float32Array(refs.length * 3);
+    refs.forEach((r, i) => { p[i * 3] = r.p[0]; p[i * 3 + 1] = r.p[1]; p[i * 3 + 2] = r.p[2]; });
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(p, 3));
+    gModel.add(new THREE.Points(geo, new THREE.PointsMaterial({ map: crossTexture(), size: 15, sizeAttenuation: false,
+      transparent: true, depthTest: false })));
+    refs.slice(0, 40).forEach(r => {
+      const s = label(r.label || 'RP', '#ffe000');
+      s.material.sizeAttenuation = false; s.scale.multiplyScalar(0.045); s.center.set(-0.35, -0.2);
+      s.position.set(r.p[0], r.p[1], r.p[2]); gModel.add(s);
+    });
+  }
+  applyColors();
+  if (!keepView || !controls) setView(M.stats.dim === '2d' || M.stats.dim === 'axi' ? 'front' : 'iso');
+}
+
+// ---------------------------------------------------------------- highlight / symbols
+function addHighlight(h, color) {
+  const mk = a => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(new Float32Array(a), 3)); return g; };
+  if (h.tris && h.tris.length) gHi.add(new THREE.Mesh(mk(h.tris), new THREE.MeshBasicMaterial({ color, side: THREE.DoubleSide,
+    transparent: true, opacity: 0.8, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 })));
+  if (h.segs && h.segs.length) gHi.add(h.tris && h.tris.length
+    ? new THREE.LineSegments(mk(h.segs), new THREE.LineBasicMaterial({ color, depthTest: false }))
+    : wideLines(h.segs, 2.2, color, null, false));
+  if (h.pts && h.pts.length) gHi.add(new THREE.Points(mk(h.pts), new THREE.PointsMaterial({ color, size: 7, sizeAttenuation: false, depthTest: false })));
+  dirty = true;
+}
+let hiSeq = 0;
+async function highlight(items) {
+  const seq = ++hiSeq;
+  clearGroup(gHi);
+  for (const [kind, name, color] of items) {
+    try {
+      const h = await api(`/api/highlight?path=${enc(curPath)}&kind=${kind}&name=${enc(name)}`);
+      if (seq !== hiSeq) return;
+      addHighlight(h, color || HILITE);
+    } catch (e) { log('高亮失败: ' + e.message, true); }
+  }
+}
+function cones(list, color, s, back) {
+  // list: [tipx, tipy, tipz, dx, dy, dz, ...]  cone tip at the point, pointing along d
+  const n = list.length / 6;
+  if (!n) return;
+  const geo = new THREE.ConeGeometry(s * 0.22, s * 0.7, 10);
+  const mesh = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color }), n);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), y = new THREE.Vector3(0, 1, 0), d = new THREE.Vector3(), p = new THREE.Vector3(), one = new THREE.Vector3(1, 1, 1);
+  for (let i = 0; i < n; i++) {
+    d.set(list[i * 6 + 3], list[i * 6 + 4], list[i * 6 + 5]);
+    q.setFromUnitVectors(y, d);
+    p.set(list[i * 6], list[i * 6 + 1], list[i * 6 + 2]).addScaledVector(d, -s * (0.35 + (back || 0)));
+    m.compose(p, q, one); mesh.setMatrixAt(i, m);
+  }
+  gSym.add(mesh);
+}
+function shafts(list, color, s, len) {
+  const n = list.length / 6, p = new Float32Array(n * 6);
+  for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++) {
+    p[i * 6 + k] = list[i * 6 + k] - list[i * 6 + 3 + k] * s * len;
+    p[i * 6 + 3 + k] = list[i * 6 + k] - list[i * 6 + 3 + k] * s * 0.5;
+  }
+  if (n) gSym.add(wideLines(p, 1.0, color));
+}
+async function loadSymbols() {
+  clearGroup(gSym);
+  $('symLegend').innerHTML = '';
+  if (!M || !$('symChk').checked) return;
+  let sy;
+  try { sy = await api(`/api/symbols?path=${enc(curPath)}&step=${$('stepSel').value}`); }
+  catch (e) { log('符号载入失败: ' + e.message, true); return; }
+  if (sy.tooLarge) return;
+  const s = diag * 0.03, tr = [], ro = [];
+  const AX = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+  for (const b of sy.bc) for (let i = 0; i < b.pts.length; i += 3) for (const d of b.dofs) {
+    if (d >= 1 && d <= 3) tr.push(b.pts[i], b.pts[i + 1], b.pts[i + 2], ...AX[d - 1]);
+    else if (d >= 4 && d <= 6) { const a = AX[d - 4]; ro.push(b.pts[i] - a[0] * s * 0.75, b.pts[i + 1] - a[1] * s * 0.75, b.pts[i + 2] - a[2] * s * 0.75, ...a); }
+  }
+  const cmom = sy.cmom || [], grav = sy.grav || [];
+  cones(tr, 0xff8000, s); cones(ro, 0x0000ff, s);
+  cones(sy.cload, 0xffff00, s * 1.4); shafts(sy.cload, 0xffff00, s * 1.4, 3);
+  cones(cmom, 0xffff00, s * 1.4); cones(cmom, 0xffff00, s * 1.4, 0.55); shafts(cmom, 0xffff00, s * 1.4, 3);   // moment: double head
+  cones(sy.press, 0xff00ff, s); shafts(sy.press, 0xff00ff, s, 2.4);
+  const b = M.stats.viewBbox || M.stats.bbox;
+  grav.slice(0, 4).forEach((g, i) => {                 // gravity / body force: one arrow beside the model
+    const d = new THREE.Vector3(...g.dir).normalize(), len = diag * 0.16;
+    const o = new THREE.Vector3(b[0][0] - diag * 0.06 * (i + 1), (b[0][1] + b[1][1]) / 2, (b[0][2] + b[1][2]) / 2).addScaledVector(d, -len / 2);
+    gSym.add(new THREE.ArrowHelper(d, o, len, 0x00e0ff, len * 0.28, len * 0.13));
+  });
+  const L = [];
+  if (tr.length) L.push('<span style="color:#ff8000">▲</span> 平动约束');
+  if (ro.length) L.push('<span style="color:#4060ff">▲</span> 转动约束');
+  if (sy.cload.length) L.push('<span style="color:#ffff00">→</span> 集中力');
+  if (cmom.length) L.push('<span style="color:#ffff00">↠</span> 集中力矩');
+  if (sy.press.length) L.push('<span style="color:#ff60ff">→</span> 压强 / 面力');
+  for (const g of grav.slice(0, 4)) L.push(`<span style="color:#00e0ff">→</span> ${g.kind === 'GRAV' ? '重力' : '体力 ' + esc(g.kind)} ${fmt(g.mag)}`);
+  $('symLegend').innerHTML = L.join('<br>');
+  dirty = true;
+}
+
+// ---------------------------------------------------------------- tree + properties
+let propCtx = '', propRows = [];
+function showProp(title, rows, ctx) {
+  propCtx = ctx || title; propRows = rows;
+  $('propHead').textContent = '属性: ' + title;
+  $('propHead').title = title;
+  let key = '';
+  $('prop').innerHTML = '<table>' + rows.map(([k, v], i) => {
+    if (k) key = k;
+    const done = pending.some(c => c.target === propCtx + ' / ' + key && c.current === String(v));
+    return `<tr><td>${esc(k)}</td><td class="v">${esc(v)}<button class="ann${done ? ' done' : ''}" data-i="${i}" title="对这一项提出修改意见">标注</button></td></tr>`;
+  }).join('') + '</table>';
+  $('prop').querySelectorAll('.ann').forEach(el => el.onclick = () => {
+    let k = '';
+    for (let i = 0; i <= +el.dataset.i; i++) if (propRows[i][0]) k = propRows[i][0];
+    addComment(propCtx + ' / ' + k, String(propRows[+el.dataset.i][1]));
+    el.classList.add('done');
+  });
+}
+function bcRows(b) {
+  const r = [['目标', b.target], ['节点数', b.n], ['分析步', b.step || 'Initial']];
+  if (b.type) r.push(['类型', b.type]);
+  r.push(['约束自由度', b.dofs.map(d => DOF[d] || d).join(', ')]);
+  for (const [a, z, m] of b.mag) r.push(['给定值 ' + (DOF[a] || a) + (z > a ? '–' + (DOF[z] || z) : ''), fmt(m)]);
+  if (paramTxt(b.params)) r.push(['关键字参数', paramTxt(b.params)]);
+  return r;
+}
+function loadRows(l) {
+  const r = [['关键字', '*' + l.kw], ['分析步', l.step]];
+  if (paramTxt(l.params)) r.push(['参数', paramTxt(l.params)]);
+  l.rows.slice(0, 12).forEach((row, i) => r.push(['数据 ' + (i + 1), rowTxt(row)]));
+  if (l.nrows > 12) r.push(['…', '共 ' + l.nrows + ' 行']);
+  return r;
+}
+const CON_NAME = { 'Coupling': '耦合', 'Rigid Body': '刚体', 'Mpc': 'MPC', 'Equation': '方程约束', 'Embedded Element': '嵌入',
+  'Display Body': '显示体', 'Pre-Tension Section': '预紧截面', 'Kinematic Coupling': '运动耦合', 'Shell To Solid Coupling': '壳-实体耦合' };
+function buildTree() {
+  const showInt = $('intChk').checked, vis = s => showInt || !(s.internal || s.name.split('.').pop().startsWith('_'));
+  const out = [];
+  const leaves = [];
+  const leaf = (cat, text, dim, rows, hi) => { leaves.push({ rows, hi, text, cat }); return `<div class="leaf" data-i="${leaves.length - 1}">${esc(text)}${dim ? ` <span class="dim">${esc(dim)}</span>` : ''}</div>`; };
+  const node = (title, items, open) => `<details${open ? ' open' : ''}><summary>${esc(title)} <span class="cnt">(${items.length})</span></summary>${items.slice(0, 2000).join('') || '<div class="empty">无</div>'}${items.length > 2000 ? `<div class="empty">… 只列出前 2000 项</div>` : ''}</details>`;
+  const st = M.stats;
+
+  out.push(node('部件', M.parts.map(p => leaf('部件', p.name, p.nodes + ' 节点', [['部件', p.name], ['节点数', p.nodes]], null))));
+  out.push(node('材料', M.materials.map(m => {
+    const rows = [['材料', m.name]];
+    for (const o of m.options) {
+      const head = '*' + o.kw + (paramTxt(o.params) ? ', ' + paramTxt(o.params) : '');
+      o.rows.forEach((r, i) => rows.push([i ? '' : head, rowTxt(r)]));
+      if (!o.rows.length) rows.push([head, '']);
+      if (o.nrows > o.rows.length) rows.push(['', '… 共 ' + o.nrows + ' 行']);
+    }
+    if (m.c !== undefined) rows.push(['√(E/ρ)', fmt(m.c) + '  ' + (m.cNote || '')]);
+    return leaf('材料', m.name, m.E !== undefined ? 'E=' + fmt(m.E) : '', rows, [['material', m.name]]);
+  }), true));
+  out.push(node('截面', M.sections.map((s, i) => leaf('截面', s.type + ': ' + (s.material || '—'), s.count + ' 单元',
+    [['类型', s.type], ['材料', s.material || '—'], ['单元集', s.elset], ['单元数', s.count],
+     ...(paramTxt(s.params) ? [['参数', paramTxt(s.params)]] : []), ...s.data.map((d, k) => ['数据 ' + (k + 1), rowTxt(d.split(',').map(t => t.trim()))])],
+    [['section', String(i)]])), true));
+
+  const asm = [];
+  asm.push(node('实例', M.instances.map(i => leaf('实例', i.name, i.elements + ' 单元',
+    [['实例', i.name], ['部件', i.part], ['节点数', i.nodes], ['单元数', i.elements], ['平移', i.translate.map(fmt).join(', ')],
+     ...(i.rotate ? [['转轴点 a', i.rotate.slice(0, 3).map(fmt).join(', ')], ['转轴点 b', i.rotate.slice(3, 6).map(fmt).join(', ')], ['转角 (°)', fmt(i.rotate[6])]] : [])],
+    [['instance', i.name]])), true));
+  asm.push(node('节点集', M.nsets.filter(vis).map(s => leaf('节点集', s.name, s.n + ' 节点', [['节点集', s.name], ['节点数', s.n]], [['nset', s.name]]))));
+  asm.push(node('单元集', M.elsets.filter(vis).map(s => leaf('单元集', s.name, s.n + ' 单元', [['单元集', s.name], ['单元数', s.n]], [['elset', s.name]]))));
+  asm.push(node('表面', M.surfaces.filter(vis).map(s => leaf('表面', s.name, s.n + (s.type === 'NODE' ? ' 节点' : ' 面'), [['表面', s.name], ['类型', s.type], ['面数', s.n]], [['surface', s.name]])), true));
+  out.push(`<details open><summary>装配 <span class="cnt">${st.nodes} 节点, ${st.elements} 单元</span></summary>${asm.join('')}</details>`);
+
+  out.push(node('分析步', [leaf('分析步', 'Initial', '', [['分析步', 'Initial'], ['边界条件数', M.initialBcs.length]], null),
+    ...M.steps.map(s => {
+      const rows = [['分析步', s.name], ['过程', '*' + (s.proc || '?') + (paramTxt(s.procParams) ? ', ' + paramTxt(s.procParams) : '')]];
+      const p = Object.assign({}, s.params); delete p.NAME;
+      if (paramTxt(p)) rows.push(['步参数', paramTxt(p)]);
+      s.procData.forEach((r, i) => rows.push(['过程数据 ' + (i + 1), rowTxt(r)]));
+      for (const o of s.outputs) rows.push(['*' + o.kw, [paramTxt(o.params), o.vars.join(', ')].filter(Boolean).join(' : ')]);
+      if (s.other.length) rows.push(['其他关键字', [...new Set(s.other)].join(', ')]);
+      return leaf('分析步', s.name, s.proc, rows, null);
+    })], true));
+
+  const allBc = [...M.initialBcs, ...M.steps.flatMap(s => s.bcs)];
+  out.push(node('边界条件', allBc.map(b => leaf('边界条件', b.target + ': ' + (b.type || b.dofs.map(d => DOF[d] || d).join(',')), '@' + (b.step || 'Initial'), bcRows(b), [['bc', b.id]])), true));
+  const allLd = M.steps.flatMap(s => s.loads);
+  out.push(node('载荷', allLd.map(l => leaf('载荷', '*' + l.kw + ': ' + (l.rows[0] ? rowTxt(l.rows[0]) : ''), '@' + l.step, loadRows(l), [['load', l.id]])), true));
+
+  const inter = [];
+  for (const t of M.ties) inter.push(leaf('Tie', 'Tie: ' + t.name, '', [['约束', 'Tie'], ['名称', t.name], ['从面 (红)', t.slave], ['主面 (紫)', t.master], ['参数', paramTxt(Object.fromEntries(Object.entries(t.params).filter(([k]) => k !== 'NAME')))]],
+    [['surface', t.slave, 0xff0000], ['surface', t.master, 0xb000ff]]));
+  for (const c of M.contactPairs) inter.push(leaf('接触对', '接触对: ' + c.slave + ' / ' + (c.master || '(自接触)'), c.step ? '@' + c.step : '',
+    [['类型', '*Contact Pair'], ['从面 (红)', c.slave], ['主面 (紫)', c.master || '(自接触)'], ['接触属性', c.interaction], ['参数', paramTxt(c.params)]],
+    [['surface', c.slave, 0xff0000], ...(c.master ? [['surface', c.master, 0xb000ff]] : [])]));
+  if (M.generalContact) {
+    const gc = M.generalContactDef || {};
+    const rows = [['类型', '通用接触 (*Contact)'], ['作用范围', gc.allExterior ? '全部外表面 (all exterior)' : (gc.inclusions || []).length ? '指定表面对' : '默认']];
+    (gc.inclusions || []).filter(r => r.some(Boolean)).slice(0, 8).forEach((r, i) => rows.push(['包含 ' + (i + 1), r.map(x => x || '(全部)').join(' / ')]));
+    (gc.exclusions || []).slice(0, 8).forEach((r, i) => rows.push(['排除 ' + (i + 1), r.map(x => x || '(全部)').join(' / ')]));
+    (gc.assignments || []).slice(0, 8).forEach((r, i) => rows.push(['接触属性 ' + (i + 1), r.map(x => x || '(全部)').join(' / ')]));
+    if (gc.step) rows.push(['定义于分析步', gc.step]);
+    inter.push(leaf('通用接触', '通用接触 (*Contact)', gc.allExterior ? '全部外表面' : '', rows, null));
+  }
+  for (const c of M.constraints) {
+    const nm = CON_NAME[c.kw] || c.kw;
+    const what = c.kw === 'Coupling' ? (c.name || c.surface) : c.kw === 'Rigid Body' ? (c.elset || c.analyticalSurface || c.refNode)
+      : c.kw === 'Display Body' ? c.instance : '';
+    const title = what ? `${nm}: ${what}` : nm;
+    const rows = [['关键字', '*' + c.kw]];
+    if (c.kw === 'Coupling') rows.push(['名称', c.name], ['参考节点 (点)', c.refNode], ['表面', c.surface], ['类型', c.kind || '—'], ...(c.dofs || []).map((r, i) => ['自由度 ' + (i + 1), rowTxt(r)]));
+    if (c.kw === 'Rigid Body') rows.push(['参考节点 (点)', c.refNode], ['单元集', c.elset || '—'], ['解析刚性面', c.analyticalSurface || '—'], ['实例', c.instance || '—']);
+    if (c.kw === 'Display Body') rows.push(['实例', c.instance], ['说明', '只用于显示, 不参与计算']);
+    if (paramTxt(c.params)) rows.push(['参数', paramTxt(c.params)]);
+    (c.rows || []).forEach((r, i) => rows.push(['数据 ' + (i + 1), rowTxt(r)]));
+    if (c.nrows > (c.rows || []).length) rows.push(['…', '共 ' + c.nrows + ' 行']);
+    inter.push(leaf('约束', title, c.kw === 'Coupling' ? (c.kind || '') : c.nrows > 1 ? c.nrows + ' 行' : '', rows, c.id ? [['constraint', c.id]] : null));
+  }
+  out.push(node('相互作用与约束', inter, true));
+  out.push(node('接触属性', M.surfInts.map(s => leaf('接触属性', s.name, s.friction && s.friction[0] ? 'μ=' + rowTxt(s.friction[0]) : '',
+    [['接触属性', s.name], ...(s.friction ? [['*Friction', (paramTxt(s.frictionParams) ? paramTxt(s.frictionParams) + ' : ' : '') + s.friction.map(rowTxt).join(' ; ')]] : []), ...(s.behavior ? [['*Surface Behavior', paramTxt(s.behavior)]] : [])], null))));
+  out.push(node('幅值', M.amplitudes.map(a => leaf('幅值', a.name, a.n + ' 点', [['幅值', a.name], ['点数', a.n],
+    ...(a.t ? [['时间范围', a.t.map(v => v.toFixed(2)).join(' – ')]] : []), ...(a.v ? [['取值范围', a.v.map(fmt).join(' – ')]] : []), ['参数', paramTxt(a.params)]], null))));
+  out.push(node('预定义场 / 初始条件', M.initialConditions.map(c => leaf('初始条件', 'type=' + c.type, c.n + ' 行', [['类型', c.type], ['行数', c.n], ...c.rows.map((r, i) => ['数据 ' + (i + 1), rowTxt(r)])], null))));
+  if (M.parameters) out.push(node('参数 (*Parameter)', Object.entries(M.parameters).map(([k, v]) => leaf('参数', k, '= ' + fmtTok(String(v)), [['参数', k], ['取值', fmtTok(String(v))]], null))));
+
+  $('tree').innerHTML = out.join('');
+  selLeaf = null;
+  $('tree').querySelectorAll('.leaf').forEach(el => el.addEventListener('click', () => {
+    if (selLeaf) selLeaf.classList.remove('sel');
+    selLeaf = el; el.classList.add('sel');
+    const it = leaves[+el.dataset.i];
+    showProp(it.text, it.rows, it.cat + ' ' + it.text);
+    if (it.hi) highlight(it.hi); else { hiSeq++; clearGroup(gHi); }
+  }));
+}
+function showOverview() {
+  const st = M.stats, b = st.bbox;
+  const feats = Object.entries(st.features || {}).map(([k, v]) => '*' + k + ' × ' + v).join(', ');
+  showProp(M.file, [['文件', M.path], ['标题', M.heading || '—'], ['节点数', st.nodes], ['单元数', st.elements],
+    ['单元类型', Object.entries(st.types).map(([k, v]) => k + ' × ' + v).join(', ')],
+    ['X 范围', fmt(b[0][0]) + ' – ' + fmt(b[1][0])], ['Y 范围', fmt(b[0][1]) + ' – ' + fmt(b[1][1])], ['Z 范围', fmt(b[0][2]) + ' – ' + fmt(b[1][2])],
+    ['组织方式', st.flat ? '平铺 (无部件/实例)' : '部件 / 实例 / 装配'],
+    ...(st.dim ? [['维度', { '3d': '三维', '2d': '平面', 'axi': '轴对称' }[st.dim] || st.dim]] : []),
+    ...(feats ? [['网格生成/参数化', feats]] : []),
+    ...(st.sizeMB !== undefined ? [['文件大小 (MB)', st.sizeMB.toFixed(2) + (st.files > 1 ? `  (含 ${st.files - 1} 个被引用文件)` : '')]] : []),
+    ['解析耗时 (s)', M.parseSeconds.toFixed(2)]], '模型 ' + M.file);
+}
+function buildChecks() {
+  const tag = { error: '错误', warn: '警告', info: '提示', ok: '通过' };
+  $('checks').innerHTML = M.checks.map((c, i) => `<div class="chk ${c.level}"><b>${tag[c.level]}</b>${esc(c.msg)}${c.level === 'ok' ? '' : `<button class="ann" data-i="${i}" title="把这条体检结果写进修改意见">标注</button>`}</div>`).join('');
+  $('checks').querySelectorAll('.ann').forEach(el => el.onclick = () => { addComment('体检' + tag[M.checks[+el.dataset.i].level], M.checks[+el.dataset.i].msg); el.classList.add('done'); });
+  const ne = M.checks.filter(c => c.level === 'error').length, nw = M.checks.filter(c => c.level === 'warn').length;
+  const bd = $('chkBadge');
+  bd.textContent = ne || nw || '✓';
+  bd.className = 'badge ' + (ne ? '' : nw ? 'warn' : 'ok');
+  $('alert').style.display = ne ? 'block' : 'none';
+  $('alert').textContent = '体检: ' + ne + ' 个错误';
+  const inc = M.incomplete || [];
+  $('partial').style.display = inc.length ? 'block' : 'none';
+  $('partial').textContent = '预览不完整: ' + (inc[0] || '') + (inc.length > 1 ? ` (共 ${inc.length} 条)` : '');
+}
+function tab(which) {
+  $('tabTree').classList.toggle('on', which === 'tree'); $('tabChk').classList.toggle('on', which === 'chk');
+  $('tree').style.display = which === 'tree' ? 'block' : 'none'; $('checks').style.display = which === 'chk' ? 'block' : 'none';
+  if (document.body.classList.contains('collapsed')) { document.body.classList.remove('collapsed'); layout(); }
+}
+$('tabTree').onclick = () => tab('tree'); $('tabChk').onclick = () => tab('chk');
+$('alert').onclick = () => tab('chk'); $('partial').onclick = () => tab('chk');
+
+// ---------------------------------------------------------------- modal (no window.confirm: it is blocked in sandboxed frames)
+function modal(title, html, okText, opt) {
+  return new Promise(res => {
+    $('mdTitle').textContent = title; $('mdBody').innerHTML = html; $('mdOk').textContent = okText || '确定';
+    $('mdCancel').style.display = opt && opt.noCancel ? 'none' : '';
+    const need = $('mdBody').querySelector('input[type=checkbox][data-need]');
+    const sync = () => { $('mdOk').disabled = !!(need && !need.checked); };
+    if (need) need.onchange = sync;
+    sync();
+    const done = v => { $('modal').classList.remove('open'); res(v); };
+    $('mdOk').onclick = () => done(true); $('mdCancel').onclick = () => done(false);
+    $('modal').classList.add('open');
+  });
+}
+
+// ---------------------------------------------------------------- review / approval
+let review = null, reviewOk = true, pending = [];
+const STATE_TXT = { none: '未审查', approved: '已批准', rejected: '已退回', stale: '批准后文件已变更，需重新审查' };
+const pendKey = () => 'abq-preview-pending:' + curPath;
+function savePending() { try { localStorage.setItem(pendKey(), JSON.stringify({ note: $('rvNote').value, comments: pending })); } catch (e) { /* storage may be unavailable */ } }
+function loadPending() {
+  pending = []; $('rvNote').value = '';
+  try { const s = JSON.parse(localStorage.getItem(pendKey()) || 'null'); if (s) { pending = s.comments || []; $('rvNote').value = s.note || ''; } } catch (e) { /* ignore */ }
+}
+function renderReview() {
+  $('rvBar').style.display = reviewOk ? '' : 'none';
+  const st = review ? review.state : 'none', e = review && review.entry;
+  let txt = STATE_TXT[st] || st;
+  if (st === 'stale' && e && e.status === 'rejected') txt = '退回后文件已更新，待重新审查';
+  $('rvState').textContent = txt;
+  $('rvState').className = st;
+  $('rvApprove').disabled = $('rvReject').disabled = !M;
+  $('rvCount').textContent = pending.length;
+  $('rvInfo').textContent = e ? `${e.decidedAt.replace('T', ' ')} ${e.status === 'approved' ? '批准' : '退回'}${st === 'stale' ? ' (针对旧版本)' : ''}${e.comments.length ? `, ${e.comments.length} 条标注` : ''}` : '';
+  $('rvInfo').title = e && e.note ? e.note : '';
+  $('rvList').innerHTML = pending.map((c, i) => `<div class="cm"><span class="t">${esc(c.target)}</span><button class="btn del" data-i="${i}" title="删除这条标注">删除</button>
+    <span class="c">当前值: ${esc(c.current || '—')}</span><input data-i="${i}" value="${esc(c.note)}" placeholder="应改为…"></div>`).join('') || '<div style="color:#888">还没有标注</div>';
+  $('rvList').querySelectorAll('.del').forEach(el => el.onclick = () => { pending.splice(+el.dataset.i, 1); savePending(); renderReview(); if (M) showPropAgain(); });
+  $('rvList').querySelectorAll('input').forEach(el => el.oninput = () => { pending[+el.dataset.i].note = el.value; savePending(); });
+  $('rvPrev').innerHTML = e ? `<h4>${st === 'stale' ? '上一版本的' : '已保存的'}审查结论 <span>${esc(e.decidedAt.replace('T', ' '))} · ${e.status === 'approved' ? '批准求解' : '退回修改'}</span></h4>` +
+    (e.note ? `<div class="cm old"><span class="n">总体意见: ${esc(e.note)}</span></div>` : '') +
+    e.comments.map(c => `<div class="cm old"><span class="t">${esc(c.target)}</span><span></span><span class="c">当前值: ${esc(c.current || '—')}</span><span class="n">要求改为: ${esc(c.note || '—')}</span></div>`).join('') : '';
+}
+function showPropAgain() { showProp($('propHead').textContent.replace(/^属性: /, ''), propRows, propCtx); }
+function addComment(target, current) {
+  let c = pending.find(x => x.target === target && x.current === current);
+  if (!c) { c = { target, current, note: '' }; pending.push(c); }
+  savePending(); renderReview();
+  $('rvPanel').classList.add('open');
+  const inp = $('rvList').querySelectorAll('input')[pending.indexOf(c)];
+  if (inp) { inp.scrollIntoView({ block: 'nearest' }); inp.focus(); }
+}
+async function loadReview() {
+  if (!curPath || !reviewOk) { renderReview(); return; }
+  try { review = await api('/api/review?path=' + enc(curPath)); }
+  catch (e) { if (e.status === 404) reviewOk = false; review = null; }
+  renderReview();
+}
+async function postReview(status, dryRun, from) {
+  const src = from || { note: $('rvNote').value, comments: pending };
+  return api('/api/review', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: curPath, status, note: src.note, comments: src.comments, dryRun: !!dryRun }) });
+}
+async function decide(status) {
+  if (!M) return;
+  if (status === 'approved') {
+    const errs = M.checks.filter(c => c.level === 'error'), inc = M.incomplete || [];
+    if (errs.length || inc.length) {
+      const ok = await modal('批准前请确认', `${errs.length ? `体检有 <b>${errs.length}</b> 个错误:<ul>${errs.slice(0, 6).map(c => `<li>${esc(c.msg)}</li>`).join('')}${errs.length > 6 ? '<li>…</li>' : ''}</ul>` : ''}` +
+        `${inc.length ? `预览不完整, 有内容没有显示出来:<ul>${inc.slice(0, 4).map(c => `<li>${esc(c)}</li>`).join('')}</ul>` : ''}` +
+        `<label><input type="checkbox" data-need> 我已知悉上述问题, 仍然批准求解</label>`, '仍然批准');
+      if (!ok) return;
+    }
+    if (pending.length && !(await modal('批准求解', `还有 ${pending.length} 条标注未处理。批准后它们会一并写入审查记录, 但 Agent 不会再修改模型。`, '批准'))) return;
+  } else if (!pending.length && !$('rvNote').value.trim()) {
+    await modal('退回修改', '请至少写一条标注或总体意见, 说明要改什么。', '好', { noCancel: true });
+    $('rvPanel').classList.add('open'); $('rvNote').focus();
+    return;
+  }
+  try {
+    const r = await postReview(status);
+    review = { state: r.state, entry: r.entry, current: true };
+    log(`${status === 'approved' ? '已批准求解' : '已退回修改'}: ${curPath}  (意见单 ${r.mdPath})`);
+    pending = []; $('rvNote').value = ''; savePending();
+    $('rvPanel').classList.remove('open');
+    renderReview(); if (M) showPropAgain();
+  } catch (e) { log('保存审查结论失败: ' + e.message, true); }
+}
+async function copyInstructions() {
+  if (!curPath) return;
+  // what is being typed now, or - when nothing is - the decision that is already on record
+  const fresh = pending.length || $('rvNote').value.trim(), e = review && review.entry;
+  let text;
+  try {
+    text = (fresh || !e ? await postReview('rejected', true) : await postReview(e.status, true, e)).markdown;
+    if (!fresh && e && review.current) text = text.replace(/^- 时间：.*$/m, '- 时间：' + e.decidedAt);
+  } catch (err) { log('生成修改指令失败: ' + err.message, true); return; }
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (e) { /* not allowed in this frame: try the old way */ }
+  if (!ok) {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    ta.remove();
+  }
+  if (ok) log('修改指令已复制到剪贴板 (' + text.length + ' 字)');
+  else modal('复制修改指令', '浏览器不允许自动写剪贴板, 请手动全选复制:<textarea readonly>' + esc(text) + '</textarea>', '关闭', { noCancel: true });
+  window.__preview.lastCopied = text;
+}
+$('rvApprove').onclick = () => decide('approved');
+$('rvReject').onclick = () => decide('rejected');
+$('rvToggle').onclick = () => $('rvPanel').classList.toggle('open');
+$('rvCopy').onclick = copyInstructions;
+$('rvNote').oninput = savePending;
+
+// ---------------------------------------------------------------- loading / watching
+let loading = false, bigInfo = null;
+function showBig(info) {
+  bigInfo = info;
+  $('big').classList.toggle('open', !!info);
+  if (!info) return;
+  $('bigTitle').textContent = `${info.file} 太大，没有自动解析`;
+  $('bigText').innerHTML = `文件 ${fmt(info.sizeMB).replace(/\.?0+$/, '')} MB，超过自动解析上限 ${info.limitMB} MB。<br>` +
+    `预计解析需要占用约 <b>${info.estimatedMemoryGB} GB</b> 内存` +
+    (info.availableCommitGB !== null && info.availableCommitGB !== undefined ? `；本机当前可用内存 (提交) ${info.availableCommitGB} GB，解析后至少要剩 ${info.reserveGB} GB。` : '。');
+  $('bigBtn').textContent = `仍然解析（预计占用约 ${info.estimatedMemoryGB} GB 内存）`;
+  $('bigBtn').disabled = !info.canForce;
+  $('bigWhy').textContent = info.reason || (info.canForce ? '' : `可用内存不足：需要 ${fmt(info.estimatedMemoryGB + info.reserveGB).replace(/\.?0+$/, '')} GB 以上，已拒绝解析，以免挤掉正在运行的求解作业。`);
+}
+$('bigBtn').onclick = () => { if (bigInfo) loadModel(bigInfo.path, false, true); };
+
+async function loadModel(path, keepView, force) {
+  if (loading) return;
+  loading = true;
+  try {
+    const m = await api('/api/model?path=' + enc(path) + (force ? '&force=1' : ''), force ? { headers: { 'X-Abq-Preview': '1' } } : undefined);
+    const same = keepView && curPath === path && M;
+    const prevStep = $('stepSel').value;
+    if (m.tooLarge) {
+      M = null; curPath = path; box = null;
+      if ($('fileSel').value !== path) $('fileSel').value = path;
+      $('chkBadge').textContent = '–'; $('chkBadge').className = 'badge warn';
+      clearGroup(gModel); clearGroup(gHi); clearGroup(gSym);
+      $('tree').innerHTML = ''; $('checks').innerHTML = ''; $('prop').innerHTML = ''; $('legend').innerHTML = ''; $('symLegend').innerHTML = '';
+      $('alert').style.display = $('partial').style.display = 'none';
+      m.mtime = (lastFiles.find(f => f.path === path) || {}).mtime;
+      showBig(m); updateTitle();
+      log(`${path}: ${m.sizeMB} MB，超过自动解析上限 ${m.limitMB} MB，未解析` + (m.reason ? '；' + m.reason : ''), true);
+      loadPending(); await loadReview();
+      loading = false;
+      return;
+    }
+    showBig(null);
+    M = m; curPath = path;
+    if ($('fileSel').value !== path) $('fileSel').value = path;      // however the model was chosen, the list shows it
+    $('stepSel').innerHTML = '<option value="-1">Initial</option>' + M.steps.map((s, i) => `<option value="${i}">${esc(s.name)}</option>`).join('');
+    $('stepSel').value = same && prevStep < M.steps.length ? prevStep : String(M.steps.length - 1);
+    buildScene(same);
+    if (!same) loadPending();
+    buildTree(); buildChecks(); showOverview();
+    updateTitle();
+    await loadSymbols();
+    await loadReview();
+    const ne = M.checks.filter(c => c.level === 'error').length, nw = M.checks.filter(c => c.level === 'warn').length;
+    log(`已载入 ${path}: ${M.stats.nodes} 节点, ${M.stats.elements} 单元, ${M.steps.length} 个分析步; 体检 ${ne} 错误 ${nw} 警告`, ne > 0);
+  } catch (e) { log('载入失败 ' + path + ': ' + e.message, true); }
+  loading = false;
+}
+function updateTitle() {
+  const s = $('stepSel');
+  const name = curPath ? curPath.split('/').pop().replace(/\.inp$/i, '') : '—';
+  $('vpTitle').textContent = `Viewport: 1    模型: ${name}    分析步: ${M && s.selectedOptions[0] ? s.selectedOptions[0].textContent : '—'}`;
+}
+let lastSeen = {}, filesKey = '', lastFiles = [], pollN = 0;
+async function poll() {
+  let L;
+  try { L = await api('/api/list'); } catch (e) { return; }
+  const files = lastFiles = L.files, key = files.map(f => f.path).sort().join('|');
+  if (key !== filesKey) {
+    filesKey = key;
+    $('fileSel').innerHTML = files.length ? files.map(f => `<option value="${esc(f.path)}">${esc(f.path)}</option>`).join('') : '<option value="">(工作区内没有 .inp)</option>';
+    if (curPath) $('fileSel').value = curPath;
+  }
+  if (!files.length) { lastSeen = {}; return; }
+  const stable = f => lastSeen[f.path] === f.mtime;   // unchanged for one poll cycle = writer has finished
+  const newest = files[0];
+  const shown = M ? M.mtime : bigInfo ? bigInfo.mtime : undefined;
+  let target = null;
+  if (!curPath) target = newest;
+  else if ($('followChk').checked && newest.path !== curPath && (shown === undefined || newest.mtime > shown)) target = newest;
+  else { const cur = files.find(f => f.path === curPath); if (cur && shown !== undefined && cur.mtime !== shown) target = cur; }
+  if (target && stable(target)) { $('fileSel').value = target.path; await loadModel(target.path, true); }
+  else if (curPath && ++pollN % 4 === 0 && !loading) loadReview();        // a decision may come from another window
+  lastSeen = Object.fromEntries(files.map(f => [f.path, f.mtime]));
+}
+$('fileSel').onchange = e => { if (e.target.value) { $('followChk').checked = false; loadModel(e.target.value, false); } };
+$('stepSel').onchange = () => { updateTitle(); loadSymbols(); };
+$('colorSel').onchange = applyColors;
+$('edgeChk').onchange = e => { if (edgeLines) edgeLines.visible = e.target.checked; dirty = true; };
+$('symChk').onchange = loadSymbols;
+$('intChk').onchange = () => M && buildTree();
+$('upSel').onchange = () => M && setView('iso');
+$('views').querySelectorAll('button').forEach(b => b.onclick = () => M && setView(b.dataset.v));
+layout(); resize(); renderReview();
+log('预览已启动, 正在监视工作区内的 .inp 文件');
+// hooks for automated tests
+window.__preview = { get model() { return M; }, setView, renderer, get review() { return review; }, get pending() { return pending; },
+  get tooLarge() { return bigInfo; }, get path() { return curPath; }, get busy() { return loading; }, addComment, decide, loadModel,
+  lastCopied: null,
+  drawnFraction() {      // share of the viewport the model covers (the canvas is transparent where nothing is drawn)
+    renderer.render(scene, camera);
+    const gl = renderer.getContext(), w = gl.drawingBufferWidth, h = gl.drawingBufferHeight, px = new Uint8Array(w * h * 4);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    let n = 0;
+    for (let i = 3; i < px.length; i += 4) if (px[i] > 0) n++;
+    return n / (w * h);
+  } };
+poll(); setInterval(poll, 1500);
+</script>
+</body>
+</html>

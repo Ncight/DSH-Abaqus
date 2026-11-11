@@ -1,0 +1,14 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "C3D20R 2 x 2 x 20, m-t-s units (kN, kPa, t/m3)"},
+  {"name": "c3d8r", "expect": "pass", "what": "CAE default C3D8R, 4 x 4 x 40"},
+  {"name": "si_units", "expect": "fail", "fails": ["base_reaction", "base_stress"],
+   "what": "consistent N / Pa / kg model: reaction 245000, stress -245000"},
+  {"name": "mixed_units", "expect": "fail", "fails": ["base_reaction", "top_settlement", "base_stress"],
+   "what": "E in kPa but density 2500 kg/m3: everything 1000 x too large"},
+  {"name": "fixed_base", "expect": "fail", "fails": ["free_lateral_expansion"],
+   "what": "base fully fixed: Poisson expansion restrained, horizontal reactions appear"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_base_reaction_kN"],
+   "what": "correct ODB, result.json written in N / Pa"}
+ ]
+}

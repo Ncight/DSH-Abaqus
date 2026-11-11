@@ -1,0 +1,16 @@
+{
+ "id": "h05_euler_buckling",
+ "title": "两端铰支压杆的线性特征值屈曲（Euler 临界荷载）",
+ "split": "holdout",
+ "job": "buckle",
+ "timeout_s": 1200,
+ "tags": ["buckle", "eigenvalue", "linear-perturbation", "boundary-conditions", "reference-load"],
+ "expected": {
+  "critical_load_N": 6.5113e4
+ },
+ "tolerances": {
+  "critical_load_rel": 0.03,
+  "reference_load_rel": 0.01,
+  "report_rel": 0.03
+ }
+}

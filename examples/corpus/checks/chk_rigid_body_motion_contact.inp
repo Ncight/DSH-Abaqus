@@ -1,0 +1,87 @@
+*Heading
+ Upper-1 carries load but has no boundary condition: only the contact pair holds it
+** written by examples/corpus/_gen/make_checks.py
+*Part, name=Block
+*Node
+     1,    0.00000,    0.00000,    0.00000
+     2,    0.50000,    0.00000,    0.00000
+     3,    1.00000,    0.00000,    0.00000
+     4,    0.00000,    0.50000,    0.00000
+     5,    0.50000,    0.50000,    0.00000
+     6,    1.00000,    0.50000,    0.00000
+     7,    0.00000,    1.00000,    0.00000
+     8,    0.50000,    1.00000,    0.00000
+     9,    1.00000,    1.00000,    0.00000
+    10,    0.00000,    0.00000,    0.50000
+    11,    0.50000,    0.00000,    0.50000
+    12,    1.00000,    0.00000,    0.50000
+    13,    0.00000,    0.50000,    0.50000
+    14,    0.50000,    0.50000,    0.50000
+    15,    1.00000,    0.50000,    0.50000
+    16,    0.00000,    1.00000,    0.50000
+    17,    0.50000,    1.00000,    0.50000
+    18,    1.00000,    1.00000,    0.50000
+    19,    0.00000,    0.00000,    1.00000
+    20,    0.50000,    0.00000,    1.00000
+    21,    1.00000,    0.00000,    1.00000
+    22,    0.00000,    0.50000,    1.00000
+    23,    0.50000,    0.50000,    1.00000
+    24,    1.00000,    0.50000,    1.00000
+    25,    0.00000,    1.00000,    1.00000
+    26,    0.50000,    1.00000,    1.00000
+    27,    1.00000,    1.00000,    1.00000
+*Element, type=C3D8R
+    1,    1,    2,    5,    4,   10,   11,   14,   13
+    2,    2,    3,    6,    5,   11,   12,   15,   14
+    3,    4,    5,    8,    7,   13,   14,   17,   16
+    4,    5,    6,    9,    8,   14,   15,   18,   17
+    5,   10,   11,   14,   13,   19,   20,   23,   22
+    6,   11,   12,   15,   14,   20,   21,   24,   23
+    7,   13,   14,   17,   16,   22,   23,   26,   25
+    8,   14,   15,   18,   17,   23,   24,   27,   26
+*Nset, nset=ALL, generate
+ 1, 27, 1
+*Elset, elset=ALL, generate
+ 1, 8, 1
+*Nset, nset=BOTTOM
+1, 2, 3, 10, 11, 12, 19, 20, 21
+*Nset, nset=TOP
+7, 8, 9, 16, 17, 18, 25, 26, 27
+*Elset, elset=ELTOP
+3, 4, 7, 8
+*Elset, elset=ELBOTTOM
+1, 2, 5, 6
+*Surface, type=ELEMENT, name=TopSurf
+ELTOP, S5
+*Surface, type=ELEMENT, name=BottomSurf
+ELBOTTOM, S3
+*Solid Section, elset=ALL, material=Steel
+,
+*End Part
+*Assembly, name=Assembly
+*Instance, name=Lower-1, part=Block
+*End Instance
+*Instance, name=Upper-1, part=Block
+0.0, 1.0, 0.0
+*End Instance
+*End Assembly
+*Material, name=Steel
+*Elastic
+ 2.06e8, 0.3
+*Density
+ 7.85,
+*Surface Interaction, name=Fric
+1.,
+*Friction
+ 0.3,
+*Contact Pair, interaction=Fric, type=SURFACE TO SURFACE
+Upper-1.BottomSurf, Lower-1.TopSurf
+*Boundary
+Lower-1.BOTTOM, ENCASTRE
+*Step, name=Load, nlgeom=NO
+*Static
+1., 1., 1e-05, 1.
+*Dsload
+Upper-1.TopSurf, P, 100.
+*Output, field, variable=PRESELECT
+*End Step

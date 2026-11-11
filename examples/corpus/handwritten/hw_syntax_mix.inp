@@ -1,0 +1,52 @@
+*Heading
+ hand-written test of input syntax: parameters, includes, quoted names, continuation, case mix
+**
+** ---- parameters: defined after their first use, integer division as in Python 2
+*NODE, NSET=PN
+ 1401, <len>, <half>, <n>
+ 1402, <twice>, 0., 0.
+*PARAMETER
+ n = 7/2
+ len = 2.5 * n       # 7.5
+ half = len / 2
+ twice = 2 * sqrt(len ** 2)
+ etype = 'C3D8'
+**
+** ---- a block of 8 nodes that comes from an included file (which includes another one)
+*Node, nset="Block Nodes"
+*INCLUDE, INPUT=hw_syntax_mix_nodes.inp
+**
+** ---- element keyword continued on a second line, parameter in the type, mixed case
+*ELEMENT,
+ type=<etype>, ELSET="Block Elems"
+ 1, 1, 2, 3, 4,
+    5, 6, 7, 8
+*elset, ELSET=All_Solid
+ "Block Elems"
+*NSET, NSET=Base, generate
+ 1, 4
+*Nset, nset="Fix Nodes"
+ Base
+*SOLID   SECTION, elset=All_Solid, MATERIAL=Steel
+*MATERIAL, NAME=Steel
+*ELASTIC, TYPE=ISO
+ 2.06E11, .3
+*DENSITY
+ 7.85D3
+**
+** masses so that the parameter nodes take part in the model
+*Element, type=MASS, elset=PM
+ 1401, 1401
+ 1402, 1402
+*Mass, elset=PM
+ 1.,
+*surface, name="Top Face"
+ "Block Elems", S2
+*BOUNDARY
+ "Fix Nodes", 1, 3
+ PN, 1, 3
+*STEP, name="Load Step"
+*STATIC
+*DSLOAD
+ "Top Face", P, 1.E5
+*ENDSTEP

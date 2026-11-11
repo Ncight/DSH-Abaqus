@@ -1,0 +1,27 @@
+{
+ "id": "h04_wave_explicit",
+ "title": "弹性杆中一维应力波传播（Abaqus/Explicit）",
+ "split": "holdout",
+ "job": "wave",
+ "timeout_s": 1500,
+ "tags": ["explicit", "dynamic", "wave-propagation", "velocity-bc", "amplitude", "output-frequency"],
+ "expected": {
+  "wave_speed_m_s": 5000.0,
+  "stress_behind_front_Pa": -4.0e7,
+  "arrival_time_at_mid_s": 1.0e-4,
+  "analysis_time_s": 1.5e-4,
+  "probe_behind_m": [0.25, 0.005, 0.005],
+  "probe_ahead_m": [0.9, 0.005, 0.005],
+  "probe_mid_m": [0.5, 0.005, 0.005]
+ },
+ "tolerances": {
+  "stress_behind_front_rel": 0.06,
+  "quiet_ahead_fraction_max": 0.10,
+  "analysis_time_rel": 0.01,
+  "arrival_time_rel": 0.06,
+  "probe_distance_max_m": 0.03,
+  "report_stress_rel": 0.05,
+  "report_wave_speed_rel": 0.05,
+  "report_arrival_time_rel": 0.06
+ }
+}

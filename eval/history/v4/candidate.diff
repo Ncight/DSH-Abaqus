@@ -1,0 +1,210 @@
+diff --git a/.dsh/skills/abaqus-geotech/SKILL.md b/.dsh/skills/abaqus-geotech/SKILL.md
+new file mode 100644
+index 0000000..a6b70cb
+--- /dev/null
++++ b/.dsh/skills/abaqus-geotech/SKILL.md
+@@ -0,0 +1,115 @@
++---
++name: abaqus-geotech
++description: 岩土与地震类分析时加载：流固耦合固结（孔压单元、渗透系数、*Soils）、不排水强度与摩尔–库仑的关键字写法、粘性（阻尼器）边界和地震波/子波输入、混凝土损伤塑性受拉软化表在 Abaqus 里的换算。给出实跑过的关键字块、对应的脚本接口名和核对用的解析值。
++---
++
++# 岩土与地震：固结、不排水强度、粘性边界、CDP 受拉
++
++本页的关键字块都取自实跑通过的输入文件（m–t–s 单位制：kN、kPa、t/m³），括号里的数是实测结果。脚本接口的名字和 INP 关键字**不是一回事**（例如接口 `MohrCoulombPlasticity` 对应关键字 `*Mohr Coulomb`）；拿不准关键字时用 `abq examples --kw "*关键字"` 找官方范例，不要猜。
++
++关键字块里每行右侧的中文是给你看的说明，**不属于输入文件**（INP 的注释只能是以 `**` 开头的整行）；数据行以 `...` 结尾表示后面还有同样格式的数据。
++
++## 固结（孔压消散、沉降随时间发展）
++
++```
++*Element, type=CPE4P, elset=SOIL            孔压单元：CPE4P、CPE8RP、C3D8P（三者结果相差不到 0.2%）；节点多一个孔压自由度 8
++*Material, name=CLAY
++*Elastic
++20000.0, 0.25
++*Permeability, specific=9.8                 specific = 水的重度 γw（kN 制是 9.8，不是 1、不是 9800）
++2.000e-08, 1.0                              渗透系数 k（长度/时间，与步长的时间单位一致）, 对应的孔隙比
++*Initial Conditions, type=RATIO             初始孔隙比必须给（节点集, e0），不给就报 INITIAL VOID RATIO HAS NOT BEEN DEFINED
++ALLN, 1.0
++*Boundary
++ALLN, 1, 1
++BASE, 2, 2
++*Step, name=Load, inc=10
++*Soils, consolidation                       不写 utol = 固定步长；这一步只有一个增量，用来突加荷载
++850.0, 850.0
++*Boundary
++TOP, 8, 8, 0.0                              排水面：孔压 = 0。不透水面什么都不用写
++*Dsload
++TOPS, P, 100.0
++*End Step
++*Step, name=Consol1, inc=5000
++*Soils, consolidation, utol=10.0            utol = 每个增量允许的最大孔压变化，取荷载的 5%～10%
++850.0, 407483.3, 1.0, 8149.7                初始步长, 本步时长, 最小步长, 最大步长
++*End Step
++```
++
++- **突加荷载放在单独的一步里，只走一个增量**，时长取 γw·h²/(6·M·k)（h 是单元尺寸，M 是侧限模量 E(1−ν)/((1+ν)(1−2ν))）。这一步结束时孔压等于荷载（实测 100.00 / 100）。把突加荷载直接放进带 utol 的步里，第一个增量的孔压跳变永远满足不了 utol，步长被一路折减到 `TIME INCREMENT REQUIRED IS LESS THAN THE MINIMUM`；加载步取得太短则孔压振荡。
++- 要在某个时刻正好有一帧，就让一个分析步在那个时刻结束。"固结完成"算到时间因数 Tv ≈ 3（实测残余孔压 0.13%）。
++- 核对：固结系数 cv = k·M/γw，Tv = cv·t/H²（H 是最长排水距离）；最终沉降 = q·H/M（实测 −0.1%）；单面排水 Tv = 0.2 时底面孔压为 0.7723 q（实测 +0.2%，20 个 CPE4P）。
++- 结果里的 POR 是超静孔压还是总孔压取决于有没有加重力和初始孔压：不加自重时就是超静孔压。
++- 脚本接口：`m.SoilsStep(...)`、`mat.Permeability(specificWeight=9.8, table=((k, e0),))`、`m.VoidsRatio(name='e0', region=..., voidsRatio1=1.0)`、`m.PorePressureBC(...)`。只支持四边形的孔压单元要先 `p.setMeshControls(regions=p.faces, elemShape=QUAD, technique=STRUCTURED)` 再 `setElementType`。
++
++## 不排水强度与摩尔–库仑
++
++```
++*Material, name=CLAY_MC
++*Elastic
++15000.0, 0.49
++*Mohr Coulomb                               摩擦角, 剪胀角（度）
++0.0, 0.0
++*Mohr Coulomb Hardening                     粘聚力, 塑性应变
++50.0, 0.0
++*Material, name=CLAY_MISES
++*Elastic
++15000.0, 0.49
++*Plastic                                    Mises 屈服应力 = √3·cu（平面应变下与 Tresca cu 等价）
++86.6025, 0.0
++```
++
++- 两种写法在平面应变压缩下的强度都是 2cu（实测都是 100.00 / 100）。Mises 屈服应力填成 2cu，强度高 15%（条形基础承载力实测高 18%）。
++- 极限荷载用位移控制加载，从反力—位移曲线的平台取值（条形基础压入 B/10 足够到平台，E/cu = 300）。单元对极限荷载影响很大，条形基础、0.125 m 网格、相对 Prandtl 解实测：CPE8RH +0.4%，CPE6M +0.8%，CPE8R +2.5%，CPE8 +4.4%，CPE4R −4.9%，CPE4 −6.3%，CPE3 +51%；CPE8R 网格放粗到 0.5 m 是 +8.8%。
++- 用运动耦合把基础面绑到参考点时，没有放进耦合的自由度上再加边界条件会被忽略（.dat 里有 `DEGREE OF FREEDOM … IS NOT ACTIVE … BOUNDARY CONDITION IS IGNORED`）。
++
++## 粘性边界与波动输入
++
++底部人工边界吸收向下传的波，同时把入射波作为节点力输入：
++
++```
++*Element, type=DASHPOT1, elset=DASH         接地阻尼器，每个边界节点一个（单节点单元）
++1001, 1
++1002, 2
++*Dashpot, elset=DASH
++1                                           第一行：作用的自由度
++200.000,                                    第二行：阻尼系数 = ρ·Vs·该节点的从属面积（剪切波、切向）
++*Amplitude, name=VINC                       入射波的速度时程 v(t)
++0.0000, 0.00000000, 0.0010, 0.00000000, ...
++*Boundary
++ALLN, 2, 2                                  一维剪切柱：所有节点约束竖向（或同高程左右节点用 *Equation 绑定）
++*Step, name=Wave, inc=5000
++*Dynamic, direct
++0.0010, 1.50
++*Cload, amplitude=VINC
++BASE, 1, 400.000                            等效节点力 = 2·ρ·Vs·从属面积·v(t)，系数 2 不能丢
++```
++
++- 阻尼系数和节点力都是**每个节点**的值，按从属面积分配，边角节点的从属面积是内部节点的一半或四分之一。
++- 核对：自由地表的速度峰值 = 2 × 入射波幅值（实测 +0.13%）；波走完后模型应静止（实测残余 0.15%）。地表到时 = 入射时刻 + H/Vs。只约束底部竖向而放开其余节点时柱子会弯曲，结果全错。
++- 网格和步长（实测，主频 4 Hz 的子波，Vs = 200，主频波长 50 m，隐式步长 0.001 s）：单元 1 m 时峰值误差 0.1%；5 m 时残余 4%；10 m 时峰值低 25%。子波的最高频率约为主频的 2.5 倍，单元尺寸按最高频率对应波长的 1/10 以下取。
++- 脚本接口：Abaqus/Standard 用 `a.engineeringFeatures.SpringDashpotToGround(name=..., region=..., orientation=None, dof=1, springBehavior=OFF, dashpotBehavior=ON, dashpotCoefficient=c)`；Abaqus/Explicit 没有接地阻尼器，用 `TwoPointSpringDashpot` 连到一个固定的参考点。显式场输出要整时刻的帧时加 `timeMarks=ON`。
++
++## 混凝土损伤塑性：受拉软化表怎么被使用
++
++```
++*Concrete Damaged Plasticity                膨胀角（必须 > 0）, 偏心率, fb0/fc0, K, 粘性系数
++35.0, 0.1, 1.16, 0.6667, 0.0
++*Concrete Compression Hardening             压应力, 非弹性应变（首行应变为 0）
++24000.0, 0.0
++32000.0, 0.0008
++*Concrete Tension Stiffening, type=STRAIN   拉应力, 开裂应变
++2500.0, 0.0
++1500.0, 0.00015
++*Concrete Tension Damage, type=STRAIN       损伤因子, 开裂应变
++0.0, 0.0
++0.35, 0.00015
++```
++
++- Abaqus 先把每一行的开裂应变换算成塑性应变：ε_pl = ε_ck − d/(1−d)·σ/E0，然后应力和损伤都**在塑性应变（输出量 PEEQT）上线性插值**（实测：应力、DAMAGET 与按 PEEQT 查表的值一致到 0.02%）。换算后的塑性应变必须逐行递增，否则报错。
++- 单轴受拉时 σ = (1−d)·E0·(ε − PE33)（实测一致）；卸载模量是 (1−d)·E0。
++- 手算某个总应变下的应力：联立上面两条求塑性应变。结果与 Abaqus 相差不到 1%（PE33 比 PEEQT 略大约 0.6%）；直接在开裂应变上插值的手算相差约 2%。偏差在这个量级不用再查，更大才是输入有错。
++- `type=DISPLACEMENT` 时表里是开裂位移；把应变表误标成位移，0.1 m 的单元上软化慢 10 倍。
++- 粘性系数只为帮助收敛，取 0 或很小（≤ 0.0005）；实测取 0.2（步长 1）时峰值应力高 68%。单个单元的位移控制拉伸取 0 也能收敛（`*Static, direct` 固定小步长）。
++- 同材料的单元串联受拉时不会自动局部化（各单元一起软化），软化段结果与单元尺寸有关，报告里说明网格尺寸。
+diff --git a/.dsh/skills/abaqus-materials-units/SKILL.md b/.dsh/skills/abaqus-materials-units/SKILL.md
+index 187e390..578e813 100644
+--- a/.dsh/skills/abaqus-materials-units/SKILL.md
++++ b/.dsh/skills/abaqus-materials-units/SKILL.md
+@@ -59,6 +59,7 @@ mc.concreteDamagedPlasticity.ConcreteTensionDamage(table=((0.0, 0.0), (dt1, eps_
+ - 压缩硬化表首行非弹性应变为 0；非弹性应变 = 总应变 − σ/E0。损伤因子在 0～1 之间且随应变不减。
+ - 粘性系数取小值（如 0.0005）帮助隐式收敛，过大会让结果偏硬；显式里取 0。
+ - 受拉软化对网格敏感，结果要说明网格尺寸。损伤输出：`DAMAGEC`、`DAMAGET`、`SDEG`。
++- 关键字写法、受拉软化表在 Abaqus 里怎么换算和插值（手算核对时要用）：skill `abaqus-geotech`。
+ 
+ ## 土体
+ 
+@@ -69,6 +70,8 @@ soil.mohrCoulombPlasticity.MohrCoulombHardening(table=((c, 0.0),))         # 粘
+ 
+ 有自重的土体先做地应力平衡（`GeostaticStep` + 初始应力），否则一加重力就产生很大的假沉降。
+ 
++对应的关键字是 `*Mohr Coulomb` 和 `*Mohr Coulomb Hardening`（不是接口名）。不排水强度、固结（孔压单元）、粘性边界：skill `abaqus-geotech`。
++
+ ## 阻尼
+ 
+ 瑞利阻尼 `mat.Damping(alpha=..., beta=...)`：阻尼比 ξ = α/(2ω) + βω/2。给定两个圆频率 ω1、ω2 处同为 ξ：α = 2ξω1ω2/(ω1+ω2)，β = 2ξ/(ω1+ω2)。显式分析里 β 会大幅减小稳定步长，尽量取 0。
+diff --git a/AGENTS.md b/AGENTS.md
+index 13a7e8a..6242cdc 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -12,7 +12,7 @@
+ | 体检一份 INP（自己用 Python 直接生成的 INP 先过这一步） | `abq check job.inp` |
+ | 求解；自动体检，给出求解诊断、结果摘要和核查结论 | `abq run job`（几万个单元以上的模型再加 `--cpus 4`；小模型多核反而慢，工具会自动改用 1 核） |
+ | 结果的更多细节：某个集合上的合计/平均及其时程、某坐标处的时程、指定分析步/帧 | `abq odb job.odb --set 集合名 --series RF`；`--probe x,y,z --series S,U`；`--sets` 列出集合 |
+-| 自己写的后处理脚本（读 ODB） | `abq python post.py` |
++| 自己写的后处理脚本（读 ODB）。脚本用 write 工具写成文件；`odbAccess` 只在 `abq python` 里有，系统 Python 里没有 | `abq python post.py` |
+ | 网格收敛 / 方案比选：同一脚本多组参数依次求解并列表对比 | `abq sweep model.py --set SEED=0.02,0.01` |
+ | 查脚本接口的真实签名 | `abq api 方法名`，如 `abq api Tie` |
+ | 找官方范例 | `abq examples --name 词` / `--api 方法名` / `--kw "*关键字"`；`abq fetch 文件名` |
+@@ -31,13 +31,13 @@
+ 4. **求解**。`abq run`。失败时按输出里的"提示"和残差位置找原因再改；不盲目重试，不靠放宽容差过关。
+ 5. **对比**。把 `abq run` 给出的结果与第 2 步的估算对比。偏差超过 10% 先怀疑自己的模型（网格、单元类型、边界、单位）；对网格敏感的量（应力集中、接触压力、塑性区）用 `abq sweep` 加密一次确认。核查结论不能是 FAIL，有警告要说明。
+ 6. **先交付，后优化**。第一次得到与估算量级一致的结果，就先把交付走通：用任务书指定的作业名正式求解，取数写好结果文件。之后时间富余再加密网格、比选方案，用更好的结果更新交付物。这样即使中途被打断，交出去的东西也是完整的。
+-7. **汇报**。结果与估算的对比、单位制、单元类型与网格规模、核查结论、已知局限。
++7. **汇报**。五项都要有：结果及其与估算/理论值的偏差（百分比）；单位制；单元类型与网格规模；核查结论（有警告就说明它为什么不影响结果）；已知局限（做了哪些简化和假设、哪些量对网格或参数敏感、哪些没有验证）。
+ 
+ ## 按难度决定投入
+ 
+ - **简单任务**（线性静力或模态、单个部件、需求明确）：照 `.dsh/skills/abaqus-cae-scripting/template_solid_static.py` 的结构直接写脚本，走完上面 7 步即可，不必加载 skill、查案例、出图。
+ - **有难点的任务**：动手前加载**最相关的一两个** skill（不要全部加载），并用 `abq cases` 查一次有没有同类案例：
+-  直接写 INP、结构化/渐密网格 → `abaqus-inp-direct`；接触、Tie、刚性面 → `abaqus-contact`；梁、壳、桁架 → `abaqus-beams-shells`；模态、屈曲、显式、阻尼 → `abaqus-dynamics`；塑性、损伤、土体、温度、单位换算 → `abaqus-materials-units`；选单元和网格密度、应力集中 → `abaqus-elements-mesh`；二维/轴对称部件、分区、选几何 → `abaqus-cae-scripting`；读 ODB、取时程 → `abaqus-postprocess`；算不动或结果对不上 → `abaqus-debug`。
++  直接写 INP、结构化/渐密网格 → `abaqus-inp-direct`；接触、Tie、刚性面 → `abaqus-contact`；梁、壳、桁架 → `abaqus-beams-shells`；模态、屈曲、显式、阻尼 → `abaqus-dynamics`；塑性、损伤、土体、温度、单位换算 → `abaqus-materials-units`；固结与孔压、不排水强度、粘性边界与地震波输入、CDP 受拉软化 → `abaqus-geotech`；选单元和网格密度、应力集中 → `abaqus-elements-mesh`；二维/轴对称部件、分区、选几何 → `abaqus-cae-scripting`；读 ODB、取时程 → `abaqus-postprocess`；算不动或结果对不上 → `abaqus-debug`。
+ - **同一个错误连续三次没修好就换路**：停止微调，换一种做法（换建模方式、换单位制、照官方范例或案例重写）。不要在同一条路上反复试到超时。
+ 
+ ## 硬性规则
+@@ -50,5 +50,5 @@
+ - **人工审查闸门**。`abq run` 提示需要人工审查时，向用户说明模型要点（几何、材料、边界、载荷、接触、网格）并停下，等用户在预览面板里批准或退回；不要想办法绕过。被退回时按审查意见逐条修改。
+ - **耗时长的求解**。预计超过 2 分钟的命令，在 pwsh 调用里把 `timeoutMs` 设够；转入后台后用 `abq status job` 查看，不要重复提交同名作业。
+ - **这台机器上常年有别的求解任务在跑**（一算就是几十个小时）。不要结束、暂停或干预任何不是你自己启动的进程；不要读写本工作区以外的算例文件；一次只跑一个 Abaqus 作业，`--cpus` 不超过 4。工具提示内存不足而暂停时，如实告诉用户并稍后重试，不要想办法绕过这个限制。
+-- **向用户汇报的数字不用科学计数法**，保留足够的有效数字。
+-- 结束前逐项核对交付清单：文件是否都在、作业名/文件名/键名/单位是否照任务书、结果文件能否读回且每个数都出自正式作业的结果库。没做完就如实说明缺哪一项，不要空手结束。
++- **向用户汇报的数字不用科学计数法**，包括复述输入参数的时候：写 210 GPa 或 210000000 kPa，不写 2.1e11、2.1×10¹¹；很小的量换一个单位（0.25 mm）或写全（0.00025 m）。结果文件里的数值不受此限。保留足够的有效数字。
++- **结束前运行一次 `abq verify 作业名 --result 结果文件名`**：它一并核对求解状态、结果库是不是现在这份 INP 算出来的、结果文件是不是合法且写于最后一次求解之后。再对照任务书看作业名、文件名、键名、单位。没做完就如实说明缺哪一项，不要空手结束。
+diff --git a/tools/abq/hints.json b/tools/abq/hints.json
+index bd18072..a80dba5 100644
+--- a/tools/abq/hints.json
++++ b/tools/abq/hints.json
+@@ -3,6 +3,26 @@
+   "pattern": "Licensing error|unable to check ?out|license (server|feature).{0,60}(not|unavailable|failed|error)|FLEXnet Licensing error",
+   "hint": "许可证问题，不是模型问题：稍等后重试同一条命令；连续失败再报告用户。"
+  },
++ {
++  "pattern": "Non-ASCII character '\\\\xff'",
++  "hint": "脚本文件是 UTF-16 编码：PowerShell 的 > 重定向和 Out-File 默认写 UTF-16。用 write 工具写脚本文件，或改用 Set-Content -Encoding ascii。"
++ },
++ {
++  "pattern": "No module named '?odbAccess|No module named '?abaqus",
++  "hint": "odbAccess / abaqus 模块只在 Abaqus 自带的 Python 里有：把代码写成文件，用 abq python 文件名.py 运行（读 ODB）或 abq script 文件名.py（建模）。"
++ },
++ {
++  "pattern": "INITIAL VOID RATIO HAS NOT BEEN DEFINED",
++  "hint": "孔压单元必须给初始孔隙比：在 *Step 之前写 *Initial Conditions, type=RATIO，数据行是 节点集, 孔隙比（脚本接口 m.VoidsRatio）。固结分析的完整关键字见 skill abaqus-geotech。"
++ },
++ {
++  "pattern": "Unknown keyword|Illegal value \\\"[^\\\"]+\\\" for parameter|keyword is misplaced",
++  "hint": "关键字或参数值不对：脚本接口名不是关键字（例如接口 MohrCoulombPlasticity 对应 *Mohr Coulomb，孔隙比的初始条件是 type=RATIO）。用 abq examples --kw \"*关键字\" 找官方范例照着写，不要猜。"
++ },
++ {
++  "pattern": "DILATION ANGLE, PSI, SHOULD BE GREATER THAN ZERO",
++  "hint": "混凝土损伤塑性的膨胀角必须大于 0（常用 30～38 度），第一行依次是 膨胀角, 偏心率, fb0/fc0, K, 粘性系数。"
++ },
+  {
+   "pattern": "'\\w+' object has no attribute '(Tie|ContactProperty|SurfaceToSurfaceContact\\w*|StaticStep|\\w+Step|\\w+BC|\\w+Section|Pressure|ConcentratedForce|Gravity|Coupling|RigidBody)'",
+   "hint": "CAE 脚本缺模块导入：脚本开头要有 from abaqus import * / from abaqusConstants import * / from caeModules import *。"

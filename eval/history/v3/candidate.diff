@@ -1,0 +1,256 @@
+diff --git a/.dsh/skills/abaqus-contact/SKILL.md b/.dsh/skills/abaqus-contact/SKILL.md
+index 088aeb0..9fe5b07 100644
+--- a/.dsh/skills/abaqus-contact/SKILL.md
++++ b/.dsh/skills/abaqus-contact/SKILL.md
+@@ -71,7 +71,7 @@ m.DisplacementBC(name='Push', createStepName='Press', region=rpset, u1=0.0, u2=-
+ ## 读结果、做核对
+ 
+ - `abq odb job.odb --vars U,RF,CPRESS,S`：接触压力场的名字是 `CPRESS   <从面>/<主面>`，给出最大值和所在节点。
+-- 传递的总力 = 被约束一侧的反力合计。最稳妥的读法是把力或位移加在参考点上（刚性面、耦合约束），直接读参考点的反力；两端都有约束时全模型净合力为 0，可以看输出里的"正值合计 / 负值合计"，但二次单元的节点反力正负混杂时这两个数不可靠，要按节点集分别求和。
++- 传递的总力 = 被约束一侧的反力合计。最稳妥的读法是把力或位移加在参考点上（刚性面、耦合约束），直接读参考点的反力；两端都有约束时全模型净合力为 0，可以看输出里的"正值合计 / 负值合计"，但二次单元的节点反力正负混杂时这两个数不可靠，要按节点集分别求和（`abq odb job.odb --set 集合名 --vars RF`）。
+ - 轴对称模型的反力是整圈合计；平面应变/平面应力模型的反力对应截面厚度（`HomogeneousSolidSection` 的 `thickness`）。
+ - **接触区尺寸**：取从面上接触压力大于 0 的节点，离接触中心最远的那个节点的距离就是接触半径（半宽）。它的分辨率就是节点间距，网格不够密时会整单元地跳，报告里写明节点间距。读各节点压力和坐标的写法见 `abaqus-postprocess`。
+ - 核对：接触压力在接触面上的积分应等于总力；与解析解（Hertz 等）比峰值压力和接触半宽；两者都对网格敏感，加密一次确认。
+diff --git a/.dsh/skills/abaqus-postprocess/SKILL.md b/.dsh/skills/abaqus-postprocess/SKILL.md
+index 1677278..2d70dfa 100644
+--- a/.dsh/skills/abaqus-postprocess/SKILL.md
++++ b/.dsh/skills/abaqus-postprocess/SKILL.md
+@@ -1,72 +1,116 @@
+ ---
+ name: abaqus-postprocess
+-description: 从 Abaqus 结果库(ODB)取数、出图、写结果文件时加载。说明 abq odb 的各种取数方式（全场最值与位置、反力合计、指定坐标处的时程、指定分析步与帧、模态频率）、需要更细的量时用 abaqus python 读 ODB 的已验证模板、云图/振型出图，以及取数时最常见的错误（取错帧、取错位置、积分点值与节点值混用、集合名大小写）。
++description: 从 Abaqus 结果库(ODB)取数、出图、写结果文件时加载。说明 abq odb 的各种取数方式（全场最值与位置、反力合计、某个集合上的合计/平均及其时程、指定坐标处的时程、指定分析步与帧、模态频率）、需要更细的量时用 abaqus python 读 ODB 的已验证写法和最常见的接口报错、云图/振型出图，以及取数时最常见的错误（取错帧、取错位置、积分点值与节点值混用、集合名大小写）。
+ ---
+ 
+ # 读结果、出图、写结果文件
+ 
+-## 先用 abq odb
++## 先用 abq odb，多数量不用写脚本
+ 
+ ```
+ abq odb job.odb                                  全部常用场量在最后一帧的最值与位置、反力/集中力合计、能量、频率
+ abq odb job.odb --vars U,S,RF                    只要这些场量
+-abq odb job.odb --step Load --frame 5            指定分析步和帧（模态分析里帧号 = 阶次）
++abq odb job.odb --step Load --frame 5            指定分析步和帧
++abq odb job.odb --sets                           列出结果库里的全部集合（名字、节点/单元数、在装配上还是在实例里）
++abq odb job.odb --set FixEnd --vars RF,U         某个集合上：RF/CF 给合计，其他场量给平均和范围；节点不多时逐个列出
++abq odb job.odb --set FixEnd --series RF         该集合上逐帧的合计（RF、CF）或平均（U、S 等）——荷载-位移曲线、反力时程
+ abq odb job.odb --probe 0.25,0.005,0.005 --series S,U,V     离该坐标最近的节点/单元上各帧的时程
+ abq odb job.odb --full                           所有张量都给不变量，并列出该帧可用的场量名
+ ```
+ 
++`--set` 和 `--probe` 可以写多次、可以同用；带了它们时只输出这部分，时程表列首尾几行和每列的全程极值及其时刻，全部数据在 `job.summary.json` 里。集合名大小写不限。**关心的位置在建模时就建成集合**（加载点、支座、要取平均的面、监测点），取数时按名字要，比按坐标找节点可靠。
++
+ 输出怎么读：
+ 
+ - **U**：`最大合量` 是位移矢量模的最大值及所在节点；`分量范围` 是各分量的最小～最大值（带符号）。
+-- **RF / CF / RM**：`合计` 是全模型代数和，等于施加的总载荷（方向相反）——这是最可靠的平衡核对。两端都有约束、净合计为 0 时，才看 `正值合计 / 负值合计`，它们的绝对值是传递的力。注意：二次单元（C3D20R、CPS8R 等）受约束面上的节点反力本身就有正有负，此时正/负合计不代表传递力；要么看净合计，要么把被约束的面分别建成节点集、用后处理脚本逐个求和，或者把力加在参考点/刚性面上直接读参考点反力。
++- **RF / CF / RM**：`合计` 是全模型代数和，等于施加的总载荷（方向相反）——这是最可靠的平衡核对。两端都有约束、净合计为 0 时，用 `--set 支座集合名` 取每个支座各自的合计。全模型的 `正值合计 / 负值合计` 只在节点反力同号时才等于传递的力；二次单元（C3D20R、CPS8R 等）受约束面上的节点反力本身有正有负，不能用它。
+ - **S**：`积分点` 一行是积分点上的值，`外推到单元节点` 是外推到单元角点的值。应力集中、表面应力要对比解析解时用外推值（更接近表面真值）；线性减缩单元每个单元只有一个积分点，两者相同，只能靠加密网格。
+ - **最大主值 / 最小主值**：拉为正。环向/轴向等特定方向的应力，在轴线与坐标轴对齐时可以直接读分量（如轴对称模型的 S33 是环向应力）。
+-- **频率**：直接列出各阶 Hz。**屈曲特征值**：乘以参考载荷得临界载荷。
++- **频率**：直接列出各阶 Hz。**屈曲特征值**：乘以参考载荷得临界载荷。特征值分析步的帧是归一化的振型，位移数值没有物理意义，时程里不包含它们。
+ - **能量比**：见 `abq verify` 的判断标准。
+-- 所有数都是模型自身单位制下的原始值。完整内容在 `job.summary.json` 里，可以用 Python 读它做进一步计算。
++- 显示为 0 的量是相对该场量级小于十亿分之一的舍入误差。所有数都是模型自身单位制下的原始值。
+ 
+ ## 写结果文件
+ 
+ 任务书要求 `result.json` 之类的文件时：数值取自 `abq run`/`abq odb` 的输出或自己的后处理脚本，键名和单位完全按任务书。**只从正式交付作业（任务书指定的作业名）的结果库取数**，临时试算作业的数不写进结果文件。数字一取齐就写文件，不要留到最后；写完读回一遍，确认是合法 JSON、每个键都有、值是数字而不是字符串。不要把估算值或理论值填进去冒充计算结果。
+ 
++`abq odb` 的完整输出在 `job.summary.json` 里（全精度），可以用系统 Python 直接读它来写结果文件，不必再开 ODB：`frequencies[i].frequency`、`fields.RF.sum.RF2`、`fields.U.maxMagnitude.value`、`setResults[i].fields.RF.sum`（顺序同 `columns`）、`setResults[i].series.RF.rows`、`probes[i].series.U.rows`。
++
+ ## 需要更细的量：abaqus python 读 ODB
+ 
+-本 skill 目录下的 `read_odb_example.py` 是跑通过的模板（节点集上的位移平均、支座反力合计、最大 Mises 及单元号、全场最大位移，写成 JSON）。复制后改写，用 `abq python post.py job` 运行。常用写法：
++用 `abq python post.py` 运行（Abaqus 自带的 Python 2.7）。下面每一行都在本机实跑过（CAE 建的模型和直接写的 INP 各一个）：
+ 
+ ```python
+ from odbAccess import openOdb
+ from abaqusConstants import *
++import json
+ odb = openOdb('job.odb', readOnly=True)
+-step = odb.steps['Load']                      # 或 odb.steps[odb.steps.keys()[-1]]
+-frame = step.frames[-1]                       # 最后一帧；frames[0] 是初始状态
+ asm = odb.rootAssembly
++step = odb.steps['Load']                          # 最后一个分析步: odb.steps[odb.steps.keys()[-1]]
++frame = step.frames[-1]                           # 最后一帧；frames[0] 是初始状态。负下标可以用，切片 frames[1:] 不行
++
++
++def find_set(name, kind='nodeSets'):              # kind: 'nodeSets' 或 'elementSets'。ODB 里集合名一律大写
++    for holder in [asm] + [asm.instances[k] for k in asm.instances.keys()]:
++        repo = getattr(holder, kind)              # CAE 的装配级集合在 asm 上；直接写的 INP（没有 *Assembly）集合在实例 'PART-1-1' 上
++        if name.upper() in repo.keys():
++            return repo[name.upper()]
++    raise KeyError('no %s named %s' % (kind, name))
++
++
++u = frame.fieldOutputs['U'].getSubset(region=find_set('Tip'))
++u2 = [float(v.data[1]) for v in u.values]         # v.data = (U1, U2, U3)，是 numpy.float32：写 JSON 前必须 float()
++rf = frame.fieldOutputs['RF'].getSubset(region=find_set('FixEnd'))
++total_rf2 = float(sum([v.data[1] for v in rf.values]))
++s = frame.fieldOutputs['S']                       # 积分点上的值
++worst = max(s.values, key=lambda v: v.mises)      # v.mises、v.maxPrincipal、v.minPrincipal、v.magnitude 是普通 float；v.elementLabel、v.integrationPoint
++s11 = s.getScalarField(componentLabel='S11')      # 单个分量（分量名见 s.componentLabels）
++mises = s.getScalarField(invariant=MISES)         # 不变量
++s_nodes = s.getSubset(position=ELEMENT_NODAL)     # 外推到单元节点
++s_fix = s.getSubset(region=find_set('FixEnd', 'elementSets'))
++modes = odb.steps['Modes']
++freqs = [float(modes.frames[i].frequency) for i in range(1, len(modes.frames))]   # 第 i 帧是第 i 阶；frames[0] 是基态；阶次是 frame.mode
++v0 = u.values[0]
++xyz = [float(c) for c in v0.instance.getNodeFromLabel(v0.nodeLabel).coordinates]  # 节点坐标（变形前）
++region = [k for k in step.historyRegions.keys() if k.startswith('Assembly')][0]   # CAE 模型是 'Assembly ASSEMBLY'，直接写的 INP 是 'Assembly Assembly-1'
++allie = step.historyRegions[region].historyOutputs['ALLIE'].data                 # ((时间, 值), ...)，普通 float
++result = {'tip_u2': sum(u2) / len(u2), 'reaction_y': total_rf2, 'max_mises': float(worst.mises),
++          'max_mises_element': int(worst.elementLabel), 'frequencies_Hz': freqs, 'tip_xyz': xyz,
++          'strain_energy': float(allie[-1][1])}
++with open('result.json', 'w') as f:
++    json.dump(result, f, indent=1)
++odb.close()
++```
+ 
+-u = frame.fieldOutputs['U'].getSubset(region=asm.nodeSets['TIP'])        # 装配级集合名在 ODB 里一律大写
+-vals = [v.data[1] for v in u.values]                                     # v.data=(U1,U2,U3)，v.magnitude，v.nodeLabel
+-inst = asm.instances['BEAM-1']                                           # 部件级集合：inst.nodeSets['NAME']、inst.elementSets['NAME']
+-
+-s = frame.fieldOutputs['S']
+-s_nodes = s.getSubset(position=ELEMENT_NODAL)                            # 外推到单元节点
+-worst = max(s.values, key=lambda v: v.mises)                             # v.mises, v.maxPrincipal, v.minPrincipal, v.data=(S11,S22,S33,S12,...)
+-hoop = s.getScalarField(componentLabel='S33')                            # 单个分量；不变量用 invariant=MISES
+-
+-freqs = [f.frequency for f in odb.steps['Modes'].frames[1:]]             # 模态频率 (Hz)
++接触压力（已实测）：接触对的场名带面对后缀，如 `'CPRESS   ASSEMBLY_BLOCKTOP/ASSEMBLY_PUNCH'`，没有名为 `'CPRESS'` 的键。
+ 
+-# 接触压力（已实测）：接触对的场名带面对后缀，如 'CPRESS   ASSEMBLY_BLOCKTOP/ASSEMBLY_PUNCH'，没有名为 'CPRESS' 的键
++```python
+ cp = [k for k in frame.fieldOutputs.keys() if k.split(' ')[0] == 'CPRESS'][0]
+ pts = []
+-for v in frame.fieldOutputs[cp].values:                                  # 标量场: v.data 是一个浮点数
++for v in frame.fieldOutputs[cp].values:           # 标量场: v.data 是一个数
+     if v.data > 0.0:
+         xyz = v.instance.getNodeFromLabel(v.nodeLabel).coordinates
+-        pts.append((xyz[0], v.data))                                     # (位置, 压力)，可按位置排序、求最远接触点
+-hist = step.historyRegions['Assembly ASSEMBLY'].historyOutputs['ALLIE'].data     # ((t, value), ...)
+-odb.close()
++        pts.append((float(xyz[0]), float(v.data)))  # (位置, 压力)，可按位置排序、求最远接触点
+ ```
+ 
+-- 这是 Python 2.7；键名用普通字符串；`print` 是语句或带括号的单参数形式。
++这些写法会报错（都是实测到的常见错误），右边是正确写法：
++
++| 会报错的写法 | 报错 | 正确写法 |
++|---|---|---|
++| `step.frames[1:]`、`fo.values[:10]` | `OdbError: Slice for an ODB Sequence is not supported` | `for i in range(1, len(step.frames)): fr = step.frames[i]`，或先 `list(step.frames)` 再切片 |
++| `json.dump` 里直接放 `v.data[0]` | `TypeError: … is not JSON serializable` | `float(v.data[0])`；整组 `[float(x) for x in v.data]` |
++| `fo.position`、`fo.location` | `'FieldOutput' object has no attribute` | `fo.locations[0].position`；单个值上是 `v.position` |
++| `fo.components` | 同上 | `fo.componentLabels` |
++| `v.node`、`v.coordinates`、`v.location` | `'FieldValue' object has no attribute` | `v.nodeLabel` + `v.instance.getNodeFromLabel(v.nodeLabel).coordinates` |
++| `inst.nodes.label`、`inst.nodes.coordinates` | `'OdbMeshNodeArray' object has no attribute` | 逐个取：`for n in inst.nodes: n.label, n.coordinates` |
++| `frame.number`、`step.increments`、`odb.jobName` | `has no attribute` | `frame.frameId`、`frame.frameValue`（分析步内时间）、`frame.incrementNumber`、`frame.description`；`odb.name` |
++| `asm.nodeSets['tip']`、集合找不到 | `KeyError` | 名字大写；直接写的 INP 的集合在 `asm.instances['PART-1-1'].nodeSets` 里；用上面的 `find_set`，或 `abq odb job.odb --sets` 看有哪些 |
++| `inst.elemSets` | `has no attribute` | `inst.elementSets` |
++
++- 这是 Python 2.7；键名用普通字符串；`print` 是语句或带括号的单参数形式；脚本里有中文要在第一行写 `# -*- coding: utf-8 -*-`。
+ - 对象的方法拿不准：`abq api getSubset`、`abq api FieldOutput.`。
+-- 想要某个集合上的结果，最省事的做法是建模时就建好这个集合（装配级），求解后按名字取。
+-- 路径上的分布：取一组节点（建模时建集合），按坐标排序后输出；节点坐标 `inst.getNodeFromLabel(label).coordinates`。
++- 路径上的分布：取一组节点（建模时建集合），按坐标排序后输出。
++- 本 skill 目录下的 `read_odb_example.py` 是另一份跑通过的完整模板。
+ 
+ ## 出图
+ 
+@@ -86,9 +130,9 @@ abq render job.inp                                求解前的模型图：网格
+ |---|---|---|
+ | 取了 `frames[0]` | 全是 0 | 用最后一帧，或指定帧 |
+ | 多个分析步时没指定步 | 取到别的分析步的结果 | `--step 名字` |
+-| 用全模型最大应力代表"某处"的应力 | 取到约束边缘/加载点的奇异峰值 | 用 `--probe` 或集合取指定位置的值 |
++| 用全模型最大应力代表"某处"的应力 | 取到约束边缘/加载点的奇异峰值 | 用 `--probe` 或 `--set` 取指定位置的值 |
+ | 拿积分点应力和理论表面应力比 | 偏低 | 用外推到节点的值，并加密网格 |
+ | 对称模型的反力/载荷没还原 | 差 2 倍或 4 倍 | 乘回对称份数，并在报告里说明 |
+ | 轴对称模型的反力当成单位弧度的 | 差 2π | 轴对称反力已是整圈合计 |
+ | 显式分析帧太少 | 看不到峰值/到达时刻 | 建模时加大 `numIntervals`，或用历程输出 |
+-| 集合名大小写/实例名不对 | KeyError | ODB 里名字是大写；部件级集合在 `instances['XXX-1']` 下 |
++| 把振型帧当成位移结果 | 数值无物理意义 | 物理位移取静力/动力分析步的帧 |
+diff --git a/AGENTS.md b/AGENTS.md
+index ce1dca8..13a7e8a 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -10,8 +10,8 @@
+ |---|---|
+ | 运行 CAE 建模脚本（无界面）；新导出的 INP 自动体检 | `abq script model.py` |
+ | 体检一份 INP（自己用 Python 直接生成的 INP 先过这一步） | `abq check job.inp` |
+-| 求解；自动体检，给出求解诊断、结果摘要和核查结论 | `abq run job`（可加 `--cpus 4`） |
+-| 结果的更多细节：指定分析步/帧、某坐标处的时程、只看某些场量 | `abq odb job.odb`（如 `--probe x,y,z --series S,U`） |
++| 求解；自动体检，给出求解诊断、结果摘要和核查结论 | `abq run job`（几万个单元以上的模型再加 `--cpus 4`；小模型多核反而慢，工具会自动改用 1 核） |
++| 结果的更多细节：某个集合上的合计/平均及其时程、某坐标处的时程、指定分析步/帧 | `abq odb job.odb --set 集合名 --series RF`；`--probe x,y,z --series S,U`；`--sets` 列出集合 |
+ | 自己写的后处理脚本（读 ODB） | `abq python post.py` |
+ | 网格收敛 / 方案比选：同一脚本多组参数依次求解并列表对比 | `abq sweep model.py --set SEED=0.02,0.01` |
+ | 查脚本接口的真实签名 | `abq api 方法名`，如 `abq api Tie` |
+@@ -25,7 +25,7 @@
+ 
+ 1. **弄清需求**。任务书写清楚的照做，不擅自改；没写清楚且会影响结果的，先问用户（清单见 skill `abaqus-plan`）。
+ 2. **先估算**。用公式或量级分析估出关键结果，用 pwsh 或 Python 一行命令算出来（参数与模型一致，不心算），写进回复。
+-3. **建模并得到 INP**。两条路按模型特点选：
++3. **建模并得到 INP**。先定理想化，用够用的最简单的那种：细长构件（索、杆、梁、柱）用梁或桁架单元，薄板薄壳用壳单元，轴对称问题用轴对称单元，只有块体才用实体单元；任务书指定了单元类型就照任务书。关心的位置（加载点、支座、监测点、要取平均的面）建成命名集合，取结果时按名字要。建模的两条路按模型特点选：
+    - CAE Python 脚本（Abaqus 自带 Python 2.7），`abq script` 运行，由脚本 `writeInput()` 导出 INP，脚本里不提交作业。适合不规则几何、多部件装配、需要自动划分网格。
+    - 用系统 Python 直接生成 INP 文本，再 `abq check`。适合规则几何、结构化或渐密网格、尺寸很小的模型；CAE 的草图/分区/网格连续失败时也改走这条路（skill `abaqus-inp-direct` 有模板）。
+ 4. **求解**。`abq run`。失败时按输出里的"提示"和残差位置找原因再改；不盲目重试，不靠放宽容差过关。
+diff --git a/tools/abq/hints.json b/tools/abq/hints.json
+index 3a5a704..bd18072 100644
+--- a/tools/abq/hints.json
++++ b/tools/abq/hints.json
+@@ -15,6 +15,38 @@
+   "pattern": "TypeError: arg1;.{0,40}generator",
+   "hint": "CAE 脚本里内置 sum 被 Abaqus 的同名函数覆盖，不接受生成器：把 sum(x for x in …) 改成 sum([x for x in …]) 或 math.fsum(…)。"
+  },
++ {
++  "pattern": "is not JSON serializable",
++  "hint": "ODB 里取出的分量是 numpy.float32，json 不认：写文件前用 float(x) 转换，一组分量用 [float(x) for x in v.data]。（v.mises、v.magnitude、历程输出的数本身是普通 float。）"
++ },
++ {
++  "pattern": "Slice for an? .{0,20}Sequence\\s+is not supported",
++  "hint": "ODB 的 frames、values 这类序列不支持切片 a[1:]：改成下标循环 for i in range(1, len(seq)): x = seq[i]，或先 list(seq) 再切片；取最后一个可以直接用 [-1]。"
++ },
++ {
++  "pattern": "'FieldOutput' object has no attribute",
++  "hint": "FieldOutput 没有这个属性。可用的：values、locations[0].position、componentLabels、validInvariants、description、type；方法 getSubset(region=…, position=ELEMENT_NODAL)、getScalarField(invariant=MISES) / getScalarField(componentLabel='S11')。"
++ },
++ {
++  "pattern": "'FieldValue' object has no attribute",
++  "hint": "FieldValue（values 里的一项）没有这个属性。可用的：data、magnitude、mises、maxPrincipal、minPrincipal、nodeLabel、elementLabel、integrationPoint、position、instance。节点坐标：v.instance.getNodeFromLabel(v.nodeLabel).coordinates。"
++ },
++ {
++  "pattern": "'OdbMesh(Node|Element)Array' object has no attribute",
++  "hint": "inst.nodes / inst.elements 是数组，属性在每个成员上：for n in inst.nodes: n.label, n.coordinates；for e in inst.elements: e.label, e.connectivity, e.type。按编号取：inst.getNodeFromLabel(n)、inst.getElementFromLabel(n)。"
++ },
++ {
++  "pattern": "'Odb(Frame|Step)?' object has no attribute",
++  "hint": "属性名不对。OdbFrame：frameId、frameValue（分析步内时间）、incrementNumber、description、mode、frequency、fieldOutputs；OdbStep：name、procedure、frames、historyRegions、timePeriod、totalTime；Odb：name、steps、rootAssembly。"
++ },
++ {
++  "pattern": "'Odb(Instance|Assembly)' object has no attribute",
++  "hint": "实例/装配上的集合叫 nodeSets、elementSets、surfaces（没有 elemSets、sets）；节点是 nodes，单元是 elements，实例在 rootAssembly.instances 里。"
++ },
++ {
++  "pattern": "Non-ASCII character",
++  "hint": "脚本文件含非 ASCII 字符而没有编码声明，或被存成了 UTF-16（PowerShell 的 > 和 Out-File 默认如此）：用 write 工具写脚本，第一行加 # -*- coding: utf-8 -*-。"
++ },
+  {
+   "pattern": "'NoneType' object has no attribute",
+   "hint": "上一步返回了 None 再取属性。最常见的是 findAt：没找到几何、或把 x、y、z 分开传时它不报错而是返回 None。用 findAt((x, y, z))（点落在目标内部），或改用 getByBoundingBox 按范围选取，并先检查选到的个数。"
+@@ -57,7 +89,7 @@
+  },
+  {
+   "pattern": "KeyError",
+-  "hint": "按名字取对象失败：名字不存在或大小写不符。集合/表面要分清建在部件上(实例里叫 实例名.集合名)还是装配上。"
++  "hint": "按名字取对象失败：名字不存在或大小写不符。集合/表面要分清建在部件上(实例里叫 实例名.集合名)还是装配上。 读 ODB 时：集合名一律大写；直接写的 INP（没有 *Assembly）的集合在 rootAssembly.instances['PART-1-1'] 下；`abq odb <odb> --sets` 列出全部集合。"
+  },
+  {
+   "pattern": "cannot be meshed|Mesh generation failed|unable to mesh|could not be meshed|not meshable",
+@@ -135,4 +167,4 @@
+   "pattern": "\\.lck|lock file|is currently being used|already (running|exists)",
+   "hint": "同名作业的锁文件(.lck)还在：确认没有同名作业在跑之后删掉 <job>.lck 再提交，或换一个作业名。"
+  }
+-]
+\ No newline at end of file
++]

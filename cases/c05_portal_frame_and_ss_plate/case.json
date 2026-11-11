@@ -1,0 +1,44 @@
+{
+ "id": "c05_portal_frame_and_ss_plate",
+ "title": "梁单元门式框架（均布线载荷）+ 壳单元简支板（均布压强）",
+ "tags": [
+  "梁单元",
+  "B31",
+  "壳单元",
+  "S4R",
+  "截面方向",
+  "线载荷",
+  "简支板",
+  "框架"
+ ],
+ "keywords": [
+  "beam",
+  "frame",
+  "shell",
+  "plate",
+  "profile",
+  "orientation",
+  "LineLoad",
+  "simply supported"
+ ],
+ "problem": "4 m 跨、3 m 高的矩形截面钢框架，横梁受 20 kN/m 均布载荷，柱脚固定；另有 2 m × 1 m × 20 mm 的四边简支钢板受 5 kPa 压强。",
+ "approach": [
+  "BaseWire 建线框，RectangularProfile + BeamSection，assignBeamSectionOrientation 指定 n1",
+  "LineLoad 加均布线载荷；柱脚顶点集合 EncastreBC",
+  "板用 BaseShell + HomogeneousShellSection；四边只约束 u3，两个角点补面内约束",
+  "场输出请求 SF（同时得到 SM）"
+ ],
+ "lessons": [
+  "请求输出 SM 会报\"无效变量\"，只请求 SF 即可",
+  "同一模型里互不相连的部件会有 UNCONNECTED REGIONS 警告，这里是有意为之",
+  "梁截面 a 沿局部 1 轴、b 沿局部 2 轴；框架在 x-y 平面、n1=(0,0,-1) 时面内弯曲的截面高度是 b"
+ ],
+ "verified": {
+  "completed": true,
+  "increments": 1
+ },
+ "files": [
+  "model.py"
+ ],
+ "source": "seed"
+}

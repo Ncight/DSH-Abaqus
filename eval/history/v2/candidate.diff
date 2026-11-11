@@ -1,0 +1,434 @@
+diff --git a/.dsh/skills/abaqus-cae-scripting/SKILL.md b/.dsh/skills/abaqus-cae-scripting/SKILL.md
+index e592c66..1d0d671 100644
+--- a/.dsh/skills/abaqus-cae-scripting/SKILL.md
++++ b/.dsh/skills/abaqus-cae-scripting/SKILL.md
+@@ -51,10 +51,16 @@ p.SectionAssignment(region=p.Set(name='All', faces=p.faces), sectionName='Sec')
+ edge_surf = a.Surface(name='Right', side1Edges=inst.edges.getByBoundingBox(xMin=W - TOL))  # 二维的表面由边组成
+ ```
+ 
++`BaseShell` 的草图必须是一个**闭合**轮廓。例如轴对称的球：半圆弧加一条沿轴线的直线把它封闭（`s.ArcByCenterEnds(...)` + `s.Line(point1=(0.0, 0.0), point2=(0.0, 2*R))`）；轮廓不闭合会报"创建壳的…特征失败"。
++
+ 轴对称：`dimensionality=AXISYMMETRIC`，草图里 x 是半径 r（必须 ≥ 0）、y 是轴向，先画一条过原点的竖直构造线 `s.ConstructionLine(point1=(0.0, -1.0), point2=(0.0, 1.0))` 作对称轴。轴对称模型里集中力和反力是**整圈的合计值**；轴线上的节点要约束 U1。
+ 
+ 在二维面上切出加密区或内部边界：`p.PartitionFaceBySketch(faces=p.faces, sketch=sk)`（`sk` 里只画切割线）。
+ 
++## 尺寸很小的模型：换单位制
++
++CAE 的几何精度约为 0.000001 个模型单位。需要的最小单元或最小几何特征小于约 0.0001 个模型单位时（例如用米建模，接触区单元只有十几微米），会出现草图/分区特征创建失败，自由网格里出现面积为零的塌缩单元（数据检查报 `area … zero, small, or negative`）。不要在原单位制里反复调网格：把整个模型改成 mm 制（长度 mm、力 N、应力 MPa、密度 t/mm³，钢 E=206000、ρ=0.00000000785）重建，结果再换算回任务书要求的单位。判断方法：先估出关心区域的尺寸（接触半宽、圆角半径、孔径），除以 10 得到单元尺寸，再看它相对模型单位是不是小于 0.0001。
++
+ ## 网格
+ 
+ ```python
+@@ -100,9 +106,14 @@ m.Gravity(name='G', createStepName='Load', comp2=-9.8)
+ | `keyword error on xxx` / 参数个数不对 | 参数名写错，用 `abq api 方法名` 查 |
+ | `NameError: name 'XXX' is not defined` | 符号常量拼错，或少了 `from abaqusConstants import *` |
+ | `KeyError: xxx` | 按名字取的对象不存在（集合、材料、分析步名字不一致） |
+-| 特征创建失败 / findAt 找不到 | 坐标没落在几何上，改用包围盒 |
++| findAt 找不到 | 坐标没落在几何上，改用包围盒 |
++| 特征创建失败（草图、拉伸、分区） | 草图不闭合或自相交；分区线没有把面完全切开；尺寸相对几何精度太小（见"尺寸很小的模型"） |
++| 解析刚性表面特征失败 | 见 skill `abaqus-contact` 里的四条规则（轴对称要对称轴构造线、轮廓不闭合、不跨轴、单段弧小于 180°） |
+ | 无法划分网格 | 需要分区，或改自由网格 |
+ | `Invalid variables are specified in an output request` | 输出变量名在该分析步/单元下无效，先只留 S、U、RF |
+ | `TypeError: arg1; … 'generator'` | 对生成器用了 `sum()`，改成列表或 `math.fsum` |
++| `TypeError: … 参数过多` | 参数个数不对，用 `abq api 方法名` 查签名 |
++| `AttributeError: 'NoneType' object has no attribute …` | 上一步返回了 None。最常见的是 `findAt`：没找到、或把 x、y、z 分开传时它**不报错而是返回 None**。正确形式：`findAt((x, y, z))` 取一个对象，`findAt(((x1, y1, z1),), ((x2, y2, z2),))` 取一组；点要落在目标内部 |
++| `IndexError: … index out of range` | 对空序列取了下标：上一步的选取/草图/分区没有生成对象（`getByBoundingBox` 选空不报错） |
+ 
+ 接触见 `abaqus-contact`，梁壳见 `abaqus-beams-shells`，动力见 `abaqus-dynamics`，材料与单位见 `abaqus-materials-units`，读结果见 `abaqus-postprocess`，算不动时见 `abaqus-debug`。
+diff --git a/.dsh/skills/abaqus-contact/SKILL.md b/.dsh/skills/abaqus-contact/SKILL.md
+index 73a2513..088aeb0 100644
+--- a/.dsh/skills/abaqus-contact/SKILL.md
++++ b/.dsh/skills/abaqus-contact/SKILL.md
+@@ -52,13 +52,19 @@ m.DisplacementBC(name='Push', createStepName='Press', region=rpset, u1=0.0, u2=-
+ - 刚性面只能当主面，不用划网格、不用赋材料。
+ - **朝向**：`side1Edges` 还是 `side2Edges` 取决于草图的绘制方向。算完如果反力和 CPRESS 全是 0、并有警告 `FACING IN THE WRONG DIRECTION`，就把 side1 换成 side2 重算。壳和梁的表面同理（`side1Faces`/`side2Faces`）。
+ - 刚性平面：草图画一条直线即可；三维刚性面用离散刚体或 `AnalyticRigidSurfExtrude`/`AnalyticRigidSurfRevolve`（参数用 `abq api` 查）。
++- **轴对称的解析刚性面**（已实测）：部件用 `dimensionality=AXISYMMETRIC, type=ANALYTIC_RIGID_SURFACE`，仍然调用 `AnalyticRigidSurf2DPlanar(sketch=s)`。四条规则，违反任何一条都报"解析刚性表面特征失败"：
++  1. 草图里先画对称轴构造线：`s.ConstructionLine(point1=(0.0, -1.0), point2=(0.0, 1.0))`；
++  2. 轮廓是一条**不闭合**的线/弧链（不能画成矩形等闭合图形）；
++  3. 轮廓全部在 r ≥ 0 一侧，可以从轴线出发，不能跨过轴线；
++  4. 单段圆弧小于 180°。
++  轴对称刚性平面就是一条从轴线出发的水平线：`s.Line(point1=(0.0, 0.0), point2=(R_plane, 0.0))`，再 `rig.ReferencePoint(point=(0.0, 0.0, 0.0))`。
+ 
+ ## 让接触算得动
+ 
+ 1. **初始位置**：两面刚好贴合（间隙为 0）最好。有间隙时，被推动的部件在接触前没有约束，纯力加载会出现刚体位移而发散。
+ 2. **加载方式**：优先位移控制（给压头/参考点位移，从反力读出力）。必须加指定的力时：先用一个小位移步建立接触，下一步去掉该位移约束改加力；或直接用位移试算，由"力—位移"关系调整位移使反力等于目标值（接触问题近似满足幂律，线接触力∝位移的 1 次多一点，点接触力∝位移的 1.5 次，迭代两三次即可到 1% 以内）。
+ 3. **增量步**：`initialInc` 取 0.05～0.1，`minInc=1e-6`，`maxNumInc` 给够。
+-4. **网格**：接触区内至少 8～10 个单元（先按解析解估接触半宽），接触面用线性单元，从面不比主面粗。
++4. **网格**：接触区内至少 8～10 个单元（先按解析解估接触半宽），接触面用线性单元，从面不比主面粗。接触半宽常常只有零点几毫米：按"接触半宽 ÷ 10"算出单元尺寸，若小于约 0.0001 个模型单位（用米建模时很常见），整个模型改用 N–mm–MPa 建，否则会出现特征创建失败和面积为零的单元；只在接触区附近分区加密，远处放粗。几何规则（球、圆柱、平板）时，更稳的做法是直接生成 INP：节点按解析坐标布置、向接触点渐密，刚性面用刚性单元加参考节点（见 skill `abaqus-inp-direct`）。
+ 5. **几何非线性**：有明显滑移或转动时 `nlgeom=ON`，`sliding=FINITE`；小滑移、小变形可用 `sliding=SMALL`。
+ 6. 还不收敛：看 `abq run` 给出的残差位置；检查主从面是否选反、表面是否选对了面（`abq check` 列出每个表面的面数）、是否有初始穿透；最后才考虑加少量接触稳定（并用 `abq verify` 确认 ALLSD/ALLIE < 5%）。
+ 
+@@ -67,7 +73,8 @@ m.DisplacementBC(name='Push', createStepName='Press', region=rpset, u1=0.0, u2=-
+ - `abq odb job.odb --vars U,RF,CPRESS,S`：接触压力场的名字是 `CPRESS   <从面>/<主面>`，给出最大值和所在节点。
+ - 传递的总力 = 被约束一侧的反力合计。最稳妥的读法是把力或位移加在参考点上（刚性面、耦合约束），直接读参考点的反力；两端都有约束时全模型净合力为 0，可以看输出里的"正值合计 / 负值合计"，但二次单元的节点反力正负混杂时这两个数不可靠，要按节点集分别求和。
+ - 轴对称模型的反力是整圈合计；平面应变/平面应力模型的反力对应截面厚度（`HomogeneousSolidSection` 的 `thickness`）。
+-- 核对：接触压力在接触面上的积分应等于总力；与解析解（Hertz 等）比峰值压力和接触半宽；峰值压力对网格敏感，加密一次确认。
++- **接触区尺寸**：取从面上接触压力大于 0 的节点，离接触中心最远的那个节点的距离就是接触半径（半宽）。它的分辨率就是节点间距，网格不够密时会整单元地跳，报告里写明节点间距。读各节点压力和坐标的写法见 `abaqus-postprocess`。
++- 核对：接触压力在接触面上的积分应等于总力；与解析解（Hertz 等）比峰值压力和接触半宽；两者都对网格敏感，加密一次确认。
+ - `abq verify` 提示"接触压力处处为 0"说明接触根本没建立。
+ 
+ ## Tie
+diff --git a/.dsh/skills/abaqus-inp-direct/SKILL.md b/.dsh/skills/abaqus-inp-direct/SKILL.md
+new file mode 100644
+index 0000000..8923935
+--- /dev/null
++++ b/.dsh/skills/abaqus-inp-direct/SKILL.md
+@@ -0,0 +1,110 @@
++---
++name: abaqus-inp-direct
++description: 不经过 CAE、用 Python 直接生成 Abaqus 输入文件(INP)时加载。适用于几何规则、要精确控制节点位置的模型：结构化网格、向接触区或应力集中处渐密的网格、尺寸很小（亚毫米）的模型，或者 CAE 的草图/分区/网格反复失败的时候。给出经过验证的生成器模板、节点与单元编号规则、单元面编号、集合与表面、刚性单元加参考节点、接触对、边界、载荷、输出请求的关键字写法。
++---
++
++# 直接写 INP
++
++## 什么时候走这条路
++
++建模有两条路，按模型特点选，不必拘泥：
++
++| | CAE 脚本（`abq script`） | 直接写 INP（Python 生成文本） |
++|---|---|---|
++| 适合 | 不规则几何、需要自动划分网格、多部件装配 | 规则几何（矩形、圆环、球冠、层状）、结构化或渐密网格、尺寸很小的模型 |
++| 优点 | 几何和网格由 CAE 处理 | 每个节点的位置由你决定，不受 CAE 几何精度和网格算法影响，运行快 |
++| 风险 | 特征创建失败、网格质量不可控 | 单元节点顺序、面编号、集合范围要自己保证正确 |
++
++CAE 的草图、分区或网格连续两三次失败时，如果几何是规则的，就改走这条路，不要继续和 CAE 较劲。
++
++## 模板
++
++本 skill 目录下的 `gen_inp_template.py` 是跑通并与解析解核对过的生成器（平面应变土柱侧限压缩：沉降、应力、反力与理论一致）。用系统 Python 3 运行（`py gen.py`），生成后 `abq check job.inp` 看体检和集合节点数，再 `abq run job`。改写时保留它的结构：参数 → 坐标数组 → 节点 → 单元 → 集合/表面 → 截面/材料 → 边界 → 分析步（载荷、输出）。
++
++## 必须自己保证的几件事
++
++- **节点坐标**：二维/轴对称只写 x、y（轴对称 x 是半径 r ≥ 0，y 是轴向）。坐标用 `%.9g` 之类的格式写，够精度又不冗长。
++- **渐密网格**：模板里的 `graded(n, total, ratio)` 给出按等比数列变化的节点坐标；接触区、孔边、固定端附近用小单元，远处用大单元，相邻单元尺寸比不超过约 1.5。
++- **单元节点顺序**：四边形（CPE4、CPS4、CAX4 及带 R 的）按**逆时针**：左下、右下、右上、左上。顺时针会得到负面积报错。六面体 C3D8：先底面四个节点（从上往下看逆时针），再顶面对应的四个。
++- **单元面编号**（加压强、定义接触面时要用）：
++  - 四边形：S1 = 节点 1-2 边，S2 = 2-3，S3 = 3-4，S4 = 4-1。按上面的节点顺序就是 下、右、上、左。
++  - 六面体：S1 = 底面(1-2-3-4)，S2 = 顶面(5-6-7-8)，S3 = 1-2-6-5，S4 = 2-3-7-6，S5 = 3-4-8-7，S6 = 4-1-5-8。
++- **集合**：`*Nset, nset=NAME, generate` 的数据行是 `起始号, 终止号, 步长`；不规则的集合直接逐个列出，每行不超过 16 个。建完用 `abq check` 核对每个集合的节点数。
++- **二维单元要截面厚度**：`*Solid Section` 的数据行写厚度（平面应变/平面应力通常写 1.0；轴对称不需要）。
++- 关键字不区分大小写；数据行以逗号分隔；以 `**` 开头的是注释。
++
++## 关键字写法（均来自跑通的输入文件）
++
++```
++*Element, type=CPE4, elset=BLOCK
++1, 1, 2, 23, 22
++*Nset, nset=BOTTOM, generate
++1, 21, 1
++*Elset, elset=TOPROW, generate
++181, 200, 1
++*Surface, type=ELEMENT, name=BLOCKTOP
++TOPROW, S3
++*Solid Section, elset=BLOCK, material=MAT
++1.0,
++*Material, name=MAT
++*Elastic
++1000000., 0.3
++*Density
++1.8,
++*Boundary
++BOTTOM, 2, 2
++CORNER, 1, 1
++*Step, name=Load, nlgeom=NO, inc=100
++*Static
++0.25, 1., 1e-06, 0.25
++*Dsload
++BLOCKTOP, P, 100.
++*Cload
++TIPNODES, 2, -10.
++*Boundary
++REF, 2, 2, -0.0001
++*Output, field
++*Node Output
++U, RF
++*Element Output
++S, E
++*Contact Output
++CSTRESS, CDISP
++*Output, history, variable=PRESELECT
++*End Step
++```
++
++- `*Boundary` 数据行：`节点或节点集, 起始自由度, 终止自由度[, 给定值]`；写在 `*Step` 之前的是初始约束，写在分析步里的可以带非零给定值。
++- `*Dsload` 的 `P` 是压强，正值压向表面；`*Cload` 是集中力，节点集里**每个节点**各加这么多。
++- `*Static` 数据行：初始增量, 分析步时长, 最小增量, 最大增量。
++- 模态分析把 `*Static` 换成 `*Frequency`（数据行写阶数），材料要有 `*Density`。重力：`*Dload` 数据行 `单元集, GRAV, 9.8, 0., -1., 0.`。
++
++### 刚性面（刚性单元 + 参考节点）与接触对
++
++```
++** 平面/轴对称里的刚性线：R2D2（平面）或 RAX2（轴对称）单元；另设一个参考节点承载刚体的运动和合反力
++*Element, type=R2D2, elset=PLATEN
++9001, 9002, 9001
++*Nset, nset=REF
++9000
++*Rigid Body, ref node=REF, elset=PLATEN
++*Surface, type=ELEMENT, name=PLATENSURF
++PLATEN, SPOS
++*Surface Interaction, name=SMOOTH
++1.0,
++*Surface Behavior, pressure-overclosure=HARD
++*Contact Pair, interaction=SMOOTH, type=SURFACE TO SURFACE
++BLOCKTOP, PLATENSURF
++*Boundary
++REF, 1, 1
++REF, 6, 6
++```
++
++- `*Contact Pair` 数据行是 `从面, 主面`；刚性面只能当主面。有摩擦时在 `*Surface Interaction` 下加 `*Friction` 和一行摩擦系数。
++- 刚性线单元的接触侧（`SPOS`）在"从第 1 个节点指向第 2 个节点的方向逆时针转 90°"的那一侧。例：压在物体**上方**的水平刚性线要让法向朝下，节点顺序应是从右到左（上例 `9002, 9001`）；垫在物体**下方**的刚性平面法向朝上，节点顺序从左到右。算完如果接触压力和反力是 0，把两个节点的顺序对调。
++- 参考节点没被约束的自由度要全部给定（平动 1、2 和转动 6），加载通过参考节点的位移或集中力施加，合力从参考节点的反力读。
++- 默认的面-面接触用罚函数实现，有很小的穿透；位移很小的算例里它会让力比理论值低 1%～2%，属正常。
++
++## 之后
++
++`abq check` 体检 → `abq run` 求解。直接写的 INP 没有部件/实例，集合名就是全局名；ODB 里实例名是 `PART-1-1`。
+diff --git a/.dsh/skills/abaqus-inp-direct/gen_inp_template.py b/.dsh/skills/abaqus-inp-direct/gen_inp_template.py
+new file mode 100644
+index 0000000..57acb70
+--- /dev/null
++++ b/.dsh/skills/abaqus-inp-direct/gen_inp_template.py
+@@ -0,0 +1,74 @@
++# -*- coding: utf-8 -*-
++"""模板：不经过 CAE，用 Python 直接写出 Abaqus 输入文件（INP）。运行：py gen_inp_template.py  （系统 Python 3 即可）
++
++适用：几何规则、想精确控制每个节点位置的模型（结构化网格、向某处渐密的网格、尺寸很小的模型）。
++本例：平面应变土柱侧限压缩。宽 1 m、高 2 m，两侧和底面法向约束，顶面压强 100 kPa（m–t–s 单位制）。
++解析解：竖向应力 -100 kPa，顶面沉降 p·H/E_oed = 0.004952 m，水平应力 -42.86 kPa。
++之后：abq check block.inp → abq run block
++"""
++JOB = 'block'
++W, H = 1.0, 2.0                 # m
++NX, NY = 8, 16                  # 单元数
++E, NU, RHO = 3.0e4, 0.3, 1.8    # kPa, -, t/m3
++P_TOP = 100.0                   # kPa
++BIAS = 1.0                      # >1 时单元沿高度向顶面渐密（相邻单元尺寸之比）
++
++
++def graded(n, total, ratio):
++    """n 个单元的节点坐标 0…total；ratio 为相邻单元尺寸之比（1 = 均匀，>1 时越靠后越小）"""
++    if abs(ratio - 1.0) < 1e-12:
++        return [total * i / n for i in range(n + 1)]
++    first = total * (1.0 - 1.0 / ratio) / (1.0 - (1.0 / ratio) ** n)
++    xs, x, h = [0.0], 0.0, first
++    for _ in range(n):
++        x += h
++        xs.append(x)
++        h /= ratio
++    xs[-1] = total
++    return xs
++
++
++xs = graded(NX, W, 1.0)
++ys = graded(NY, H, BIAS)
++
++
++def nid(i, j):                  # 节点号：i 沿 x (0…NX)，j 沿 y (0…NY)，从 1 开始
++    return j * (NX + 1) + i + 1
++
++
++def eid(i, j):                  # 单元号：i 沿 x (0…NX-1)，j 沿 y (0…NY-1)
++    return j * NX + i + 1
++
++
++L = ['*Heading', 'Confined compression of a soil column, plane strain, units m-t-s (kN, kPa)',
++     '*Node']
++for j in range(NY + 1):
++    for i in range(NX + 1):
++        L.append('%d, %.9g, %.9g' % (nid(i, j), xs[i], ys[j]))
++
++# 四边形单元的节点必须按逆时针顺序：左下、右下、右上、左上。
++# 这样单元的面编号是 S1=下边、S2=右边、S3=上边、S4=左边。
++L.append('*Element, type=CPE4, elset=SOIL')
++for j in range(NY):
++    for i in range(NX):
++        L.append('%d, %d, %d, %d, %d' % (eid(i, j), nid(i, j), nid(i + 1, j), nid(i + 1, j + 1), nid(i, j + 1)))
++
++# 节点集：generate 的三项是 起始号, 终止号, 步长
++L += ['*Nset, nset=BOTTOM, generate', '%d, %d, 1' % (nid(0, 0), nid(NX, 0)),
++      '*Nset, nset=TOP, generate', '%d, %d, 1' % (nid(0, NY), nid(NX, NY)),
++      '*Nset, nset=LEFT, generate', '%d, %d, %d' % (nid(0, 0), nid(0, NY), NX + 1),
++      '*Nset, nset=RIGHT, generate', '%d, %d, %d' % (nid(NX, 0), nid(NX, NY), NX + 1),
++      '*Elset, elset=TOPROW, generate', '%d, %d, 1' % (eid(0, NY - 1), eid(NX - 1, NY - 1)),
++      '*Surface, type=ELEMENT, name=TOPSURF', 'TOPROW, S3',          # 顶排单元的上边
++      '*Solid Section, elset=SOIL, material=SOILMAT', '1.0,',        # 平面单元的厚度
++      '*Material, name=SOILMAT', '*Elastic', '%.9g, %.9g' % (E, NU), '*Density', '%.9g,' % RHO,
++      '*Boundary', 'BOTTOM, 2, 2', 'LEFT, 1, 1', 'RIGHT, 1, 1',      # 节点集, 起始自由度, 终止自由度
++      '*Step, name=Load, nlgeom=NO', '*Static', '1., 1., 1e-05, 1.',
++      '*Dsload', 'TOPSURF, P, %.9g' % P_TOP,                         # 正的压强压向表面
++      '*Output, field', '*Node Output', 'U, RF', '*Element Output', 'S, E',
++      '*Output, history, variable=PRESELECT',
++      '*End Step']
++
++with open(JOB + '.inp', 'w') as f:
++    f.write('\n'.join(L) + '\n')
++print('written %s.inp: %d nodes, %d elements' % (JOB, (NX + 1) * (NY + 1), NX * NY))
+diff --git a/.dsh/skills/abaqus-materials-units/SKILL.md b/.dsh/skills/abaqus-materials-units/SKILL.md
+index 007ccdb..187e390 100644
+--- a/.dsh/skills/abaqus-materials-units/SKILL.md
++++ b/.dsh/skills/abaqus-materials-units/SKILL.md
+@@ -19,6 +19,7 @@ Abaqus 不认识单位，输入必须自洽。运行 `abq units` 看完整对照
+ - 钢：SI 下 E=206000000000、ρ=7850；m–t–s 下 E=206000000、ρ=7.85；mm–t–s 下 E=206000、ρ=0.00000000785。
+ - 自检：√(E/ρ) 是波速。m 制下钢约 5100、混凝土约 3500、土 100～1000；mm 制下是它的 1000 倍。`abq check` 自动给出这个值。
+ - 压强/面力用应力单位，线载荷用 力/长度，集中力用力单位，体力/重力靠密度×加速度。
++- 零件尺寸是毫米级、或需要亚毫米的单元时，用 mm–t–s 制建模（CAE 的几何精度约 0.000001 个模型单位，用米建模会失败）；结果按 1 MPa = 1000000 Pa、1 mm = 0.001 m 换算回去。
+ - 换算最容易错的是密度和重力加速度：m–t–s 里密度是 t/m³（混凝土 2.5，不是 2500），mm–t–s 里 g=9800。
+ 
+ ## 弹性与密度
+diff --git a/.dsh/skills/abaqus-postprocess/SKILL.md b/.dsh/skills/abaqus-postprocess/SKILL.md
+index c210191..1677278 100644
+--- a/.dsh/skills/abaqus-postprocess/SKILL.md
++++ b/.dsh/skills/abaqus-postprocess/SKILL.md
+@@ -27,7 +27,7 @@ abq odb job.odb --full                           所有张量都给不变量，
+ 
+ ## 写结果文件
+ 
+-任务书要求 `result.json` 之类的文件时：数值取自 `abq odb` 的输出或自己的后处理脚本，键名和单位完全按任务书。写完用 `read` 看一眼确认是合法 JSON、每个键都有。不要把估算值或理论值填进去冒充计算结果。
++任务书要求 `result.json` 之类的文件时：数值取自 `abq run`/`abq odb` 的输出或自己的后处理脚本，键名和单位完全按任务书。**只从正式交付作业（任务书指定的作业名）的结果库取数**，临时试算作业的数不写进结果文件。数字一取齐就写文件，不要留到最后；写完读回一遍，确认是合法 JSON、每个键都有、值是数字而不是字符串。不要把估算值或理论值填进去冒充计算结果。
+ 
+ ## 需要更细的量：abaqus python 读 ODB
+ 
+@@ -51,6 +51,14 @@ worst = max(s.values, key=lambda v: v.mises)                             # v.mis
+ hoop = s.getScalarField(componentLabel='S33')                            # 单个分量；不变量用 invariant=MISES
+ 
+ freqs = [f.frequency for f in odb.steps['Modes'].frames[1:]]             # 模态频率 (Hz)
++
++# 接触压力（已实测）：接触对的场名带面对后缀，如 'CPRESS   ASSEMBLY_BLOCKTOP/ASSEMBLY_PUNCH'，没有名为 'CPRESS' 的键
++cp = [k for k in frame.fieldOutputs.keys() if k.split(' ')[0] == 'CPRESS'][0]
++pts = []
++for v in frame.fieldOutputs[cp].values:                                  # 标量场: v.data 是一个浮点数
++    if v.data > 0.0:
++        xyz = v.instance.getNodeFromLabel(v.nodeLabel).coordinates
++        pts.append((xyz[0], v.data))                                     # (位置, 压力)，可按位置排序、求最远接触点
+ hist = step.historyRegions['Assembly ASSEMBLY'].historyOutputs['ALLIE'].data     # ((t, value), ...)
+ odb.close()
+ ```
+diff --git a/AGENTS.md b/AGENTS.md
+index c5c85ee..ce1dca8 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -1,48 +1,54 @@
+ # Abaqus 仿真工作区
+ 
+-你在这个工作区里替一位资深结构/岩土分析师做 Abaqus 2021 仿真。他要的是**算对、能核查**的结果，不是"看起来跑完了"的结果。宁可多做一次核对，也不要交一个没验证的数。
++你在这个工作区里替一位资深结构/岩土分析师做 Abaqus 2021 仿真。他要的是**算对、能核查**的结果，不是"看起来跑完了"的结果。
+ 
+ ## 工具箱 abq
+ 
+-所有 Abaqus 操作都走工具箱 `E:\DSH-Abaqus\abq.cmd`（下文简写 `abq`，调用时写全路径）。它替你调用 Abaqus、读懂日志、给出下一步提示。**不要直接调用 `abaqus` 命令**——那样既没有诊断也没有检查。
++所有 Abaqus 操作都走工具箱 `E:\DSH-Abaqus\abq.cmd`（下文简写 `abq`，调用时写全路径）。它替你调用 Abaqus、读懂日志、给出下一步提示。**不要直接调用 `abaqus` 命令**。
+ 
+ | 要做的事 | 命令 |
+ |---|---|
+-| 运行 CAE 建模脚本（无界面） | `abq script model.py` |
+-| INP 静态体检 + 模型摘要 | `abq check job.inp` |
+-| 求解器数据检查 | `abq datacheck job` |
+-| 求解并给出诊断 | `abq run job`（可加 `--cpus 4`） |
+-| 结果摘要：最大值及位置、反力合计、能量、频率 | `abq odb job.odb`（可加 `--probe x,y,z --series S,U`） |
++| 运行 CAE 建模脚本（无界面）；新导出的 INP 自动体检 | `abq script model.py` |
++| 体检一份 INP（自己用 Python 直接生成的 INP 先过这一步） | `abq check job.inp` |
++| 求解；自动体检，给出求解诊断、结果摘要和核查结论 | `abq run job`（可加 `--cpus 4`） |
++| 结果的更多细节：指定分析步/帧、某坐标处的时程、只看某些场量 | `abq odb job.odb`（如 `--probe x,y,z --series S,U`） |
+ | 自己写的后处理脚本（读 ODB） | `abq python post.py` |
+-| 收工前核查 | `abq verify job` |
+-| 网格收敛 / 方案比选（同一脚本多组参数依次求解并列表对比） | `abq sweep model.py --set SEED=0.02,0.01,0.005` |
+-| 出图（给用户看，也给自己看） | `abq render job.odb --var S`，再用 read_image 看图 |
++| 网格收敛 / 方案比选：同一脚本多组参数依次求解并列表对比 | `abq sweep model.py --set SEED=0.02,0.01` |
+ | 查脚本接口的真实签名 | `abq api 方法名`，如 `abq api Tie` |
+-| 找官方范例 | `abq examples --kw "*CONTACT PAIR"` / `--api 方法名` / `--name 词`；`abq fetch 文件名` |
++| 找官方范例 | `abq examples --name 词` / `--api 方法名` / `--kw "*关键字"`；`abq fetch 文件名` |
+ | 已验证的案例库 | `abq cases 关键词` |
+-| 单位制对照 | `abq units` |
++| 出图（用户要图，或需要目视核对时） | `abq render job.odb --var S`，再用 read_image 看 |
+ 
+-## 每个仿真任务的流程
++另有 `abq datacheck`（只做数据检查）、`abq verify`（单独核查）、`abq status`、`abq units`（单位制对照表）。
+ 
+-1. **弄清需求**。分析类型、几何、材料、边界、载荷、单位制、要交付哪些结果量。任务书写清楚的照做，不擅自改；没写清楚且会影响结果的，先问用户再建模（清单和方案模板见 skill `abaqus-plan`）。
+-2. **先估算**。动手前用公式或量级分析估出关键结果（位移、应力、频率、反力），写进回复里。没有解析解也要估量级。估算用 pwsh 或 Python 一行命令算出来，参数与模型里用的完全一致，不心算。
+-3. **找依据**。先 `abq cases` 看有没有同类已验证案例；按任务类型加载对应的 skill；接口参数拿不准就 `abq api`，不凭记忆猜。
+-4. **写脚本**。建模写成 CAE Python 脚本（Abaqus 自带 Python 2.7），用 `abq script` 运行，由脚本 `writeInput()` 导出 INP，脚本里不提交作业。
+-5. **体检**。`abq check` 无错误，再 `abq datacheck` 通过。
+-6. **求解**。`abq run`。失败时按输出里的"提示"和残差位置找原因再改；不盲目重试，不靠放宽容差过关。
+-7. **读结果并对比**。`abq odb`，把关键结果与第 2 步的估算对比。偏差超过 10% 时先怀疑自己的模型（网格、单元类型、边界、单位），查明原因并修正；对网格敏感的量（应力集中、接触压力、塑性区）要加密一次，确认结果不再明显变化。
+-8. **核查**。`abq verify` 的结论不能是 FAIL；有警告就在报告里说明含义。
+-9. **汇报**。给出：结果与估算的对比、单位制、单元类型与网格规模、核查结论、已知局限、关键图片路径。
++## 流程
++
++1. **弄清需求**。任务书写清楚的照做，不擅自改；没写清楚且会影响结果的，先问用户（清单见 skill `abaqus-plan`）。
++2. **先估算**。用公式或量级分析估出关键结果，用 pwsh 或 Python 一行命令算出来（参数与模型一致，不心算），写进回复。
++3. **建模并得到 INP**。两条路按模型特点选：
++   - CAE Python 脚本（Abaqus 自带 Python 2.7），`abq script` 运行，由脚本 `writeInput()` 导出 INP，脚本里不提交作业。适合不规则几何、多部件装配、需要自动划分网格。
++   - 用系统 Python 直接生成 INP 文本，再 `abq check`。适合规则几何、结构化或渐密网格、尺寸很小的模型；CAE 的草图/分区/网格连续失败时也改走这条路（skill `abaqus-inp-direct` 有模板）。
++4. **求解**。`abq run`。失败时按输出里的"提示"和残差位置找原因再改；不盲目重试，不靠放宽容差过关。
++5. **对比**。把 `abq run` 给出的结果与第 2 步的估算对比。偏差超过 10% 先怀疑自己的模型（网格、单元类型、边界、单位）；对网格敏感的量（应力集中、接触压力、塑性区）用 `abq sweep` 加密一次确认。核查结论不能是 FAIL，有警告要说明。
++6. **先交付，后优化**。第一次得到与估算量级一致的结果，就先把交付走通：用任务书指定的作业名正式求解，取数写好结果文件。之后时间富余再加密网格、比选方案，用更好的结果更新交付物。这样即使中途被打断，交出去的东西也是完整的。
++7. **汇报**。结果与估算的对比、单位制、单元类型与网格规模、核查结论、已知局限。
++
++## 按难度决定投入
++
++- **简单任务**（线性静力或模态、单个部件、需求明确）：照 `.dsh/skills/abaqus-cae-scripting/template_solid_static.py` 的结构直接写脚本，走完上面 7 步即可，不必加载 skill、查案例、出图。
++- **有难点的任务**：动手前加载**最相关的一两个** skill（不要全部加载），并用 `abq cases` 查一次有没有同类案例：
++  直接写 INP、结构化/渐密网格 → `abaqus-inp-direct`；接触、Tie、刚性面 → `abaqus-contact`；梁、壳、桁架 → `abaqus-beams-shells`；模态、屈曲、显式、阻尼 → `abaqus-dynamics`；塑性、损伤、土体、温度、单位换算 → `abaqus-materials-units`；选单元和网格密度、应力集中 → `abaqus-elements-mesh`；二维/轴对称部件、分区、选几何 → `abaqus-cae-scripting`；读 ODB、取时程 → `abaqus-postprocess`；算不动或结果对不上 → `abaqus-debug`。
++- **同一个错误连续三次没修好就换路**：停止微调，换一种做法（换建模方式、换单位制、照官方范例或案例重写）。不要在同一条路上反复试到超时。
+ 
+ ## 硬性规则
+ 
+-- **数字必须有出处**。报告和结果文件里的每个数都来自 `abq odb` 的输出或自己的后处理脚本，不心算代替、不编造；没算出来就说没算出来。
+-- **单位制**。任务书指定了就用任务书的；没指定时本项目默认 m–t–s（力 kN、应力/模量 kPa、密度 t/m³、g=9.8）。模型内部必须自洽，报告里写明单位制。`abq check` 会给出 √(E/ρ) 帮你发现差 1000 倍的错误。
+-- **按任务书命名**。作业名、结果文件名、键名、单位完全照任务书。
++- **数字必须有出处**。报告和结果文件里的每个数都来自 `abq run`/`abq odb` 的输出或自己的后处理脚本，不心算代替、不编造；没算出来就说没算出来。
++- **单位制**。任务书指定了就用任务书的；没指定时默认 m–t–s（力 kN、应力/模量 kPa、密度 t/m³、g=9.8）。模型内部必须自洽，报告里写明单位制。体检会给出 √(E/ρ) 帮你发现差 1000 倍的错误。
++- **尺寸很小的模型改用 mm 制**。CAE 的几何精度约为 0.000001 个模型单位。需要的最小单元尺寸小于约 0.0001 个模型单位时（例如用米建模，而接触区、圆角、孔只有零点几毫米），会出现特征创建失败和面积为零的单元。这时整个模型用 N–mm–MPa（密度 t/mm³）建，结果再换算成任务书要求的单位；或者不经过 CAE，直接生成 INP（节点坐标自己算，不受这个精度限制）。
++- **按任务书命名**。作业名、结果文件名、键名、单位完全照任务书。试算和比选可以用临时作业名，但交付物里的数一律取自按任务书作业名求解的正式作业。
+ - **脚本开头**固定三行：`from abaqus import *`、`from abaqusConstants import *`、`from caeModules import *`。
+-- **建模决策先读 skill**：选单元和网格密度、接触、动力/显式、梁壳、塑性等，先加载对应的 skill 再动手。
+ - **人工审查闸门**。`abq run` 提示需要人工审查时，向用户说明模型要点（几何、材料、边界、载荷、接触、网格）并停下，等用户在预览面板里批准或退回；不要想办法绕过。被退回时按审查意见逐条修改。
+ - **耗时长的求解**。预计超过 2 分钟的命令，在 pwsh 调用里把 `timeoutMs` 设够；转入后台后用 `abq status job` 查看，不要重复提交同名作业。
+-- **这台机器上常年有别的求解任务在跑**（它们一算就是几十个小时）。不要结束、暂停或干预任何不是你自己启动的进程；不要读写本工作区以外的算例文件；一次只跑一个 Abaqus 作业，`--cpus` 不超过 4。工具提示内存不足而暂停时，如实告诉用户并稍后重试，不要想办法绕过这个限制。
++- **这台机器上常年有别的求解任务在跑**（一算就是几十个小时）。不要结束、暂停或干预任何不是你自己启动的进程；不要读写本工作区以外的算例文件；一次只跑一个 Abaqus 作业，`--cpus` 不超过 4。工具提示内存不足而暂停时，如实告诉用户并稍后重试，不要想办法绕过这个限制。
+ - **向用户汇报的数字不用科学计数法**，保留足够的有效数字。
+-- 完成后回顾一遍：任务书要求的每一项交付物是否都已产出、数值是否与结果库一致。
++- 结束前逐项核对交付清单：文件是否都在、作业名/文件名/键名/单位是否照任务书、结果文件能否读回且每个数都出自正式作业的结果库。没做完就如实说明缺哪一项，不要空手结束。
+diff --git a/tools/abq/hints.json b/tools/abq/hints.json
+index 0aae068..3a5a704 100644
+--- a/tools/abq/hints.json
++++ b/tools/abq/hints.json
+@@ -15,6 +15,34 @@
+   "pattern": "TypeError: arg1;.{0,40}generator",
+   "hint": "CAE 脚本里内置 sum 被 Abaqus 的同名函数覆盖，不接受生成器：把 sum(x for x in …) 改成 sum([x for x in …]) 或 math.fsum(…)。"
+  },
++ {
++  "pattern": "'NoneType' object has no attribute",
++  "hint": "上一步返回了 None 再取属性。最常见的是 findAt：没找到几何、或把 x、y、z 分开传时它不报错而是返回 None。用 findAt((x, y, z))（点落在目标内部），或改用 getByBoundingBox 按范围选取，并先检查选到的个数。"
++ },
++ {
++  "pattern": "IndexError: (tuple|list|Sequence)? ?index out of range|IndexError: Sequence index out of range",
++  "hint": "对空序列取了下标：多半是上一步没有真正生成对象（草图/分区失败，或 getByBoundingBox / findAt 没选到东西——选空不报错）。先打印 len(...) 确认对象存在，再取下标。"
++ },
++ {
++  "pattern": "参数过多|应当提供 \\d+, 已获得|takes (exactly|at most) \\d+ arguments?",
++  "hint": "方法调用时参数个数不对。用 abq api <方法名> 核对真实签名，或 abq examples --api <方法名> 看官方用法。"
++ },
++ {
++  "pattern": "area of \\d+ elements? is zero, small, or negative|ErrElemAreaSmallNegZero",
++  "hint": "网格里有面积为零的塌缩单元。尺寸很小的模型（单元尺寸接近 CAE 几何精度）用自由网格时常见：把模型改成 mm 制重建，或对该区域分区后用结构化网格。"
++ },
++ {
++  "pattern": "特征创建失败|面必须包含一些实体|Feature creation failed",
++  "hint": "特征创建失败的常见原因：草图不闭合或自相交；分区用的线没有把面/体完全切开；选取到的几何为空；尺寸相对 CAE 几何精度(约 0.000001 个模型单位)太小——最小特征小于约 0.0001 个模型单位时改用 mm 制建模。同一种写法试两三次不行就换做法，不要反复微调。"
++ },
++ {
++  "pattern": "创建壳的.{0,8}特征失败|Shell.{0,20}feature.{0,10}fail",
++  "hint": "BaseShell 需要一个闭合的草图轮廓：检查各线段首尾是否相接成封闭图形（例如半圆弧要加一条沿轴线的直线封口），有没有重叠或自相交的线。"
++ },
++ {
++  "pattern": "解析刚性表面.{0,12}特征失败|Analytic(al)? rigid surface.{0,30}fail",
++  "hint": "解析刚性面创建失败，逐条核对：轴对称部件的草图里要先画对称轴构造线；轮廓必须是不闭合的线/弧链；轮廓不能跨过对称轴；单段圆弧要小于 180°（半圆拆成两段）。详见 skill abaqus-contact。"
++ },
+  {
+   "pattern": "Invalid variables are specified in an output request",
+   "hint": "输出请求里有该分析步或单元类型不支持的变量名：梁/壳的截面力和弯矩统一请求 SF（结果库里会同时有 SF 和 SM）；接触量请求 CSTRESS、CDISP（结果库里是 CPRESS、COPEN 等）；显式分析没有 CF；拿不准就只保留 S、U、RF 再逐个加。"

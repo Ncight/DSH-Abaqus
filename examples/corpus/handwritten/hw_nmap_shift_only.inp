@@ -1,0 +1,40 @@
+*HEADING
+ hand-written test: *NMAP, TYPE=RECTANGULAR with only point a (a plain shift), *NCOPY shift applied twice
+** Every node carries a MASS element, because the output database only keeps nodes that some element uses.
+**
+** ---- A. only point a is given: the nodes are simply shifted by (5, 6, 40)
+*NODE, NSET=H1
+ 501, 1., 0., 0.
+ 502, 0., 2., 0.
+ 503, 1., 1., 3.
+*NMAP, NSET=H1, TYPE=RECTANGULAR
+ 5., 6., 40.
+
+
+**
+** ---- B. *NCOPY with a translation only and MULTIPLE=2 (is the translation applied once or twice?)
+*NODE, NSET=S6
+ 601, 2., 0., 20.
+ 602, 3., 0., 20.
+*NCOPY, CHANGE NUMBER=10, OLD SET=S6, NEW SET=S6T, SHIFT, MULTIPLE=2
+ 0., 1., 0.
+
+**
+*ELEMENT, TYPE=MASS, ELSET=MASSES
+ 501, 501
+ 502, 502
+ 503, 503
+ 601, 601
+ 602, 602
+ 611, 611
+ 612, 612
+ 621, 621
+ 622, 622
+*MASS, ELSET=MASSES
+ 1.0,
+*NSET, NSET=ALLN, ELSET=MASSES
+*BOUNDARY
+ ALLN, 1, 3
+*STEP
+*STATIC
+*END STEP

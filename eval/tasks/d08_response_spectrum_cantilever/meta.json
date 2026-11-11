@@ -1,0 +1,53 @@
+{
+ "id": "d08_response_spectrum_cantilever",
+ "title": "悬臂杆振型分解反应谱法：前三阶振型 SRSS 组合的基底剪力、基底弯矩与顶点位移",
+ "suite": "domain",
+ "split": "holdout",
+ "job": "spectrum",
+ "timeout_s": 1800,
+ "tags": [
+  "seismic",
+  "response-spectrum",
+  "modal",
+  "srss",
+  "cantilever",
+  "stick-model",
+  "domain"
+ ],
+ "expected": {
+  "frequencies_Hz": [
+   0.971512,
+   6.08836,
+   17.04759
+  ],
+  "base_shear_kN": 464.11,
+  "top_displacement_m": 0.084063,
+  "total_mass_t": 360.0,
+  "effective_mass_fractions": [
+   0.613076,
+   0.1883,
+   0.064732
+  ],
+  "spectral_acceleration_m_s2": 2.0,
+  "base_moment_kNm": 7727.65,
+  "modal_base_shear_kN": [
+   441.415,
+   135.576,
+   46.607
+  ],
+  "modal_base_moment_kNm": [
+   7696.3,
+   680.6,
+   142.52
+  ]
+ },
+ "tolerances": {
+  "frequency_rel": [
+   0.02,
+   0.02,
+   0.03
+  ],
+  "response_rel": 0.03,
+  "report_rel": 0.03
+ }
+}

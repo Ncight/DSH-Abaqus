@@ -1,0 +1,44 @@
+{
+ "id": "c02_punch_on_block_frictional_contact",
+ "title": "平面应变：刚度较大的压块压在软基座上（带摩擦的面-面接触，两个分析步）",
+ "tags": [
+  "接触",
+  "摩擦",
+  "平面应变",
+  "CPE4R",
+  "面-面接触",
+  "位移控制",
+  "局部加密",
+  "PartitionFaceBySketch"
+ ],
+ "keywords": [
+  "contact",
+  "friction",
+  "punch",
+  "plane strain",
+  "surface-to-surface",
+  "two steps",
+  "refine"
+ ],
+ "problem": "0.06 m 宽的钢压块压在 0.20 m × 0.10 m 的软基座上，摩擦系数 0.3，压块顶面下压 0.5 mm。",
+ "approach": [
+  "基座用 PartitionFaceBySketch 切出压块下方的加密区，seedEdgeBySize 局部加密",
+  "主面取较硬的压块底面，从面取较软且网格更细的基座顶面",
+  "第 1 步用 0.01 mm 的小位移建立接触，第 2 步用 setValuesInStep 加到 0.5 mm",
+  "输出 CSTRESS、CDISP"
+ ],
+ "lessons": [
+  "先小位移建立接触再加载，12 个增量步无折减收敛",
+  "两端都有约束时反力净合计为 0，传递的力看\"正值合计\"",
+  "压块角点下方是应力奇异点，峰值随网格加密而增大，不能当作结果"
+ ],
+ "verified": {
+  "increments": 12,
+  "cutbacks": 0,
+  "transmitted_force_kN_per_m": 579.97
+ },
+ "files": [
+  "model.py"
+ ],
+ "source": "seed"
+}

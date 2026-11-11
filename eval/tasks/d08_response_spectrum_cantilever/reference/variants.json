@@ -1,0 +1,14 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "2-D stick, 24 B23, 3 modes, flat spectrum 2.0 m/s2 in x, SRSS; base shear from the effective masses (the ODB has none)"},
+  {"name": "b21", "expect": "pass", "what": "shear-flexible B21 elements: transverse section force available in the spectrum step"},
+  {"name": "cqc", "expect": "pass", "what": "CQC combination: the three modes are far apart, same result as SRSS"},
+  {"name": "spectrum_in_g", "expect": "fail", "fails": ["top_displacement", "base_moment"], "passes": ["frequency_1", "frequency_2", "frequency_3"], "what": "spectrum ordinate taken as g: x 9.8"},
+  {"name": "abs_sum", "expect": "fail", "fails": ["base_moment", "report_base_shear_kN"], "passes": ["frequency_1", "top_displacement"], "what": "absolute-sum combination: base moment +10 %, base shear +34 %"},
+  {"name": "one_mode", "expect": "fail", "fails": ["frequency_2", "frequency_3", "report_base_shear_kN"], "passes": ["frequency_1", "top_displacement", "base_moment"], "what": "one mode only: base shear -4.9 %"},
+  {"name": "density_slip", "expect": "fail", "fails": ["frequency_1", "top_displacement"], "what": "density 2500 in a t/m3 model"},
+  {"name": "axial_excitation", "expect": "fail", "fails": ["top_displacement", "base_moment"], "passes": ["frequency_1", "frequency_2", "frequency_3"], "what": "spectrum applied along the axis of the stick"},
+  {"name": "section_turned", "expect": "fail", "fails": ["frequency_1"], "what": "section depth 6 m in the bending direction"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_base_shear_kN"], "passes": ["top_displacement", "base_moment", "frequency_1"], "what": "correct ODB, base shear reported in N"}
+ ]
+}

@@ -1,0 +1,48 @@
+# scratch, isolated DSH homes, benchmark run directories (large, reproducible)
+.dsh-eval/
+# human review state of the interactive workspace
+.abq/review.json
+.abq/review/
+# Abaqus job files anywhere
+*.odb
+*.sim
+*.stt
+*.mdl
+*.prt
+*.res
+*.lck
+*.com
+*.023
+*.abq
+*.pac
+*.sel
+*.ipm
+*.msg
+*.sta
+*.dat
+*.log
+*.abqlog
+*.rpy
+*.rpy.*
+*.rec
+*.cae
+*.jnl
+*.summary.json
+*.verify.json
+__pycache__/
+# generated indexes can be rebuilt (abq build-api, build_samples_index.py)
+tools/abq/data/_api_build/
+# candidate working copies of the guidance (throw-away, each has its own git repository);
+# what a candidate proposed is archived in eval/history/<name>/
+eval/variants/
+*.runinfo.json
+# Dassault Systemes material: never committed. Rebuild / fetch from your own Abaqus installation
+# (abq build-api, tools/abq/build_samples_index.py, examples/corpus/fetch_official.py)
+tools/abq/data/api_index.json.gz
+tools/abq/data/samples_index.json.gz
+examples/corpus/official/
+examples/corpus/_gen/odb_truth_official.json
+tools/preview/tests/shots/official_*.png
+# scratch folder of the desktop walkthrough
+examples/desktop_gate_test/
+refs/

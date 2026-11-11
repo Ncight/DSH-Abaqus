@@ -1,0 +1,93 @@
+{
+ "gap_0.0015": {
+  "completed": true,
+  "notTied": 0,
+  "odbSets": {
+   "assembly:WarnNodeAdjust": 117
+  },
+  "position": [
+   0.0,
+   0.1015,
+   0.35
+  ],
+  "warningsPrinted": 0
+ },
+ "gap_0.0020": {
+  "completed": true,
+  "notTied": 0,
+  "odbSets": {
+   "assembly:WarnNodeAdjust": 117
+  },
+  "position": [
+   0.0,
+   0.10200000000000001,
+   0.35
+  ],
+  "warningsPrinted": 0
+ },
+ "gap_0.0033": {
+  "completed": true,
+  "notTied": 0,
+  "odbSets": {
+   "assembly:WarnNodeAdjust": 117
+  },
+  "position": [
+   0.0,
+   0.1033,
+   0.35
+  ],
+  "warningsPrinted": 0
+ },
+ "gap_0.0038": {
+  "completed": true,
+  "notTied": 117,
+  "odbSets": {
+   "assembly:WarnNodeMissMasterIntersect": 117
+  },
+  "position": [
+   0.0,
+   0.1038,
+   0.35
+  ],
+  "warningsPrinted": 11
+ },
+ "overhang_0.08750": {
+  "completed": true,
+  "notTied": 39,
+  "odbSets": {
+   "assembly:WarnNodeMissMasterIntersect": 39
+  },
+  "position": [
+   0.0875,
+   0.1,
+   0.35
+  ],
+  "warningsPrinted": 11
+ },
+ "overhang_0.09375": {
+  "completed": true,
+  "notTied": 52,
+  "odbSets": {
+   "assembly:WarnNodeMissMasterIntersect": 52
+  },
+  "position": [
+   0.09375,
+   0.1,
+   0.35
+  ],
+  "warningsPrinted": 11
+ },
+ "overhang_0.10000": {
+  "completed": true,
+  "notTied": 52,
+  "odbSets": {
+   "assembly:WarnNodeMissMasterIntersect": 52
+  },
+  "position": [
+   0.1,
+   0.1,
+   0.35
+  ],
+  "warningsPrinted": 11
+ }
+}

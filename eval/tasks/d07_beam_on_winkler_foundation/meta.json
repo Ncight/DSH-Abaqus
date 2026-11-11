@@ -1,0 +1,22 @@
+{
+ "id": "d07_beam_on_winkler_foundation",
+ "title": "弹性地基梁（Winkler 地基，Hetényi 解）：基床系数换算 + 荷载点挠度与弯矩",
+ "suite": "domain",
+ "split": "holdout",
+ "job": "winkler",
+ "timeout_s": 1800,
+ "tags": ["winkler", "elastic-foundation", "beam", "soil-structure-interaction", "springs", "domain"],
+ "expected": {
+  "deflection_under_load_m": 3.70475e-3,
+  "moment_under_load_kNm": 351.463,
+  "lambda_1_per_m": 0.355656,
+  "foundation_stiffness_kN_per_m2": 24000.0,
+  "load_point": [20.0, 0.0, 0.0]
+ },
+ "tolerances": {
+  "deflection_rel": 0.03,
+  "moment_rel": 0.04,
+  "report_rel": 0.03,
+  "report_moment_rel": 0.04
+ }
+}

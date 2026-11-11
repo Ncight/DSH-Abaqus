@@ -1,0 +1,95 @@
+diff --git a/.dsh/skills/abaqus-cae-scripting/SKILL.md b/.dsh/skills/abaqus-cae-scripting/SKILL.md
+index e592c66..27afd62 100644
+--- a/.dsh/skills/abaqus-cae-scripting/SKILL.md
++++ b/.dsh/skills/abaqus-cae-scripting/SKILL.md
+@@ -104,5 +104,7 @@ m.Gravity(name='G', createStepName='Load', comp2=-9.8)
+ | 无法划分网格 | 需要分区，或改自由网格 |
+ | `Invalid variables are specified in an output request` | 输出变量名在该分析步/单元下无效，先只留 S、U、RF |
+ | `TypeError: arg1; … 'generator'` | 对生成器用了 `sum()`，改成列表或 `math.fsum` |
++| `TypeError: arg1; 参数过多`（或英文 takes exactly n arguments） | 方法参数个数/形式不对：findAt 只收一个坐标序列 `findAt(((x, y, z),))`；其余用 `abq api 方法名` 查签名 |
++| `IndexError: tuple index out of range` | 对空对象取了下标：先确认上一步（草图/分区/选取）真的生成了对象——`getByBoundingBox` 选空不报错，只返回空对象 |
+ 
+ 接触见 `abaqus-contact`，梁壳见 `abaqus-beams-shells`，动力见 `abaqus-dynamics`，材料与单位见 `abaqus-materials-units`，读结果见 `abaqus-postprocess`，算不动时见 `abaqus-debug`。
+diff --git a/.dsh/skills/abaqus-contact/SKILL.md b/.dsh/skills/abaqus-contact/SKILL.md
+index 73a2513..04ce2d0 100644
+--- a/.dsh/skills/abaqus-contact/SKILL.md
++++ b/.dsh/skills/abaqus-contact/SKILL.md
+@@ -66,8 +66,9 @@ m.DisplacementBC(name='Push', createStepName='Press', region=rpset, u1=0.0, u2=-
+ 
+ - `abq odb job.odb --vars U,RF,CPRESS,S`：接触压力场的名字是 `CPRESS   <从面>/<主面>`，给出最大值和所在节点。
+ - 传递的总力 = 被约束一侧的反力合计。最稳妥的读法是把力或位移加在参考点上（刚性面、耦合约束），直接读参考点的反力；两端都有约束时全模型净合力为 0，可以看输出里的"正值合计 / 负值合计"，但二次单元的节点反力正负混杂时这两个数不可靠，要按节点集分别求和。
++- **接触斑半径/面积**：取从面上 CPRESS > 0 的节点，按离接触中心的距离排序，最远节点的距离就是接触斑半径——节点间距就是这个数的分辨率，报告里写明。用 `abq python` 读各节点 CPRESS 与坐标（写法见 `abaqus-postprocess`），不要凭云图目测。接触斑边界在两个节点之间，网格不够密时半径会整单元地跳。
+ - 轴对称模型的反力是整圈合计；平面应变/平面应力模型的反力对应截面厚度（`HomogeneousSolidSection` 的 `thickness`）。
+-- 核对：接触压力在接触面上的积分应等于总力；与解析解（Hertz 等）比峰值压力和接触半宽；峰值压力对网格敏感，加密一次确认。
++- 核对：接触压力在接触面上的积分应等于总力；与解析解（Hertz 等）比峰值压力和接触半宽；峰值压力与接触斑半径都对网格敏感，加密一次确认两者都稳定下来。
+ - `abq verify` 提示"接触压力处处为 0"说明接触根本没建立。
+ 
+ ## Tie
+diff --git a/.dsh/skills/abaqus-postprocess/SKILL.md b/.dsh/skills/abaqus-postprocess/SKILL.md
+index c210191..34599d5 100644
+--- a/.dsh/skills/abaqus-postprocess/SKILL.md
++++ b/.dsh/skills/abaqus-postprocess/SKILL.md
+@@ -27,7 +27,7 @@ abq odb job.odb --full                           所有张量都给不变量，
+ 
+ ## 写结果文件
+ 
+-任务书要求 `result.json` 之类的文件时：数值取自 `abq odb` 的输出或自己的后处理脚本，键名和单位完全按任务书。写完用 `read` 看一眼确认是合法 JSON、每个键都有。不要把估算值或理论值填进去冒充计算结果。
++任务书要求 `result.json` 之类的文件时：数值取自 `abq odb` 的输出或自己的后处理脚本，键名和单位完全按任务书。**只从正式交付作业（任务书指定作业名）的 ODB 取数**，临时试算作业的数不写进结果文件。数字一取齐就立刻写文件（模板 `read_odb_example.py`），不要留到最后；写完用 `read` 或 `abq python` 把文件读回打印，确认是合法 JSON、每个键都有、值是数字而不是字符串。不要把估算值或理论值填进去冒充计算结果。
+ 
+ ## 需要更细的量：abaqus python 读 ODB
+ 
+@@ -56,6 +56,7 @@ odb.close()
+ ```
+ 
+ - 这是 Python 2.7；键名用普通字符串；`print` 是语句或带括号的单参数形式。
++- 接触量：`frame.fieldOutputs['CPRESS']` 是标量场，在节点上取值（`v.magnitude` 或 `v.data[0]`，配合 `v.nodeLabel`）；只在发生接触的帧里有，别在 `frames[0]`（初始帧）找它。节点坐标 `inst.getNodeFromLabel(v.nodeLabel).coordinates`，可用来按位置排序（如算接触斑半径）。
+ - 对象的方法拿不准：`abq api getSubset`、`abq api FieldOutput.`。
+ - 想要某个集合上的结果，最省事的做法是建模时就建好这个集合（装配级），求解后按名字取。
+ - 路径上的分布：取一组节点（建模时建集合），按坐标排序后输出；节点坐标 `inst.getNodeFromLabel(label).coordinates`。
+diff --git a/AGENTS.md b/AGENTS.md
+index c5c85ee..dcc2642 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -31,18 +31,19 @@
+ 5. **体检**。`abq check` 无错误，再 `abq datacheck` 通过。
+ 6. **求解**。`abq run`。失败时按输出里的"提示"和残差位置找原因再改；不盲目重试，不靠放宽容差过关。
+ 7. **读结果并对比**。`abq odb`，把关键结果与第 2 步的估算对比。偏差超过 10% 时先怀疑自己的模型（网格、单元类型、边界、单位），查明原因并修正；对网格敏感的量（应力集中、接触压力、塑性区）要加密一次，确认结果不再明显变化。
+-8. **核查**。`abq verify` 的结论不能是 FAIL；有警告就在报告里说明含义。
+-9. **汇报**。给出：结果与估算的对比、单位制、单元类型与网格规模、核查结论、已知局限、关键图片路径。
++8. **先交付，后优化**。第一次得到与估算量级一致的结果后，先把交付流程整个走通一遍：用任务书指定的作业名正式求解 → 取数写结果文件 → 汇报草稿，确认每个交付物都能产出；时间富余再继续加密网格、比选方案，用更好的结果更新交付物。这样即使中途被打断，交出去的东西也是完整的。同一类报错改 2 次仍失败就换思路（读 skill、`abq api`、`abq cases`、简化模型），不要反复微调同一个写法。
++9. **核查**。`abq verify` 的结论不能是 FAIL；有警告就在报告里说明含义。汇报前逐项核对任务书的交付清单：文件是否都在、作业名/文件名/键名/单位是否照任务书、结果文件能否读回且每个数都出自正式作业的 ODB。
++10. **汇报**。给出：结果与估算的对比、单位制、单元类型与网格规模、核查结论、已知局限、关键图片路径。
+ 
+ ## 硬性规则
+ 
+ - **数字必须有出处**。报告和结果文件里的每个数都来自 `abq odb` 的输出或自己的后处理脚本，不心算代替、不编造；没算出来就说没算出来。
+ - **单位制**。任务书指定了就用任务书的；没指定时本项目默认 m–t–s（力 kN、应力/模量 kPa、密度 t/m³、g=9.8）。模型内部必须自洽，报告里写明单位制。`abq check` 会给出 √(E/ρ) 帮你发现差 1000 倍的错误。
+-- **按任务书命名**。作业名、结果文件名、键名、单位完全照任务书。
++- **按任务书命名**。作业名、结果文件名、键名、单位完全照任务书；试算和比选可以用临时作业名，但交付用的正式作业必须按任务书作业名重跑，交付物一律取自正式作业。
+ - **脚本开头**固定三行：`from abaqus import *`、`from abaqusConstants import *`、`from caeModules import *`。
+ - **建模决策先读 skill**：选单元和网格密度、接触、动力/显式、梁壳、塑性等，先加载对应的 skill 再动手。
+ - **人工审查闸门**。`abq run` 提示需要人工审查时，向用户说明模型要点（几何、材料、边界、载荷、接触、网格）并停下，等用户在预览面板里批准或退回；不要想办法绕过。被退回时按审查意见逐条修改。
+ - **耗时长的求解**。预计超过 2 分钟的命令，在 pwsh 调用里把 `timeoutMs` 设够；转入后台后用 `abq status job` 查看，不要重复提交同名作业。
+ - **这台机器上常年有别的求解任务在跑**（它们一算就是几十个小时）。不要结束、暂停或干预任何不是你自己启动的进程；不要读写本工作区以外的算例文件；一次只跑一个 Abaqus 作业，`--cpus` 不超过 4。工具提示内存不足而暂停时，如实告诉用户并稍后重试，不要想办法绕过这个限制。
+ - **向用户汇报的数字不用科学计数法**，保留足够的有效数字。
+-- 完成后回顾一遍：任务书要求的每一项交付物是否都已产出、数值是否与结果库一致。
++- 完成后回顾一遍：任务书要求的每一项交付物是否都已产出（文件存在、作业名/文件名/键名/单位照任务书、每个数都能在正式作业的 ODB 里找到出处）。没完成就如实说明缺哪项，不要空手结束。
+diff --git a/tools/abq/hints.json b/tools/abq/hints.json
+index 0aae068..cc3a259 100644
+--- a/tools/abq/hints.json
++++ b/tools/abq/hints.json
+@@ -106,5 +106,13 @@
+  {
+   "pattern": "\\.lck|lock file|is currently being used|already (running|exists)",
+   "hint": "同名作业的锁文件(.lck)还在：确认没有同名作业在跑之后删掉 <job>.lck 再提交，或换一个作业名。"
++ },
++ {
++  "pattern": "参数过多|应当提供 \\d+, 已获得",
++  "hint": "方法调用时参数个数/形式不对（英文报错是 takes exactly n arguments）。最常见的坑是 findAt：它只收一个坐标序列 findAt(((x, y, z),))，坐标要落在几何内部。拿不准就用 abq api <方法名> 核对真实签名，或 abq examples --api <方法名> 看官方用法。"
++ },
++ {
++  "pattern": "IndexError: (tuple|list) index out of range",
++  "hint": "对空序列取了下标：多半是上一步没真正生成对象（草图/分区/选取失败，或 getByBoundingBox 选空——选空不报错，只返回空对象）。先确认上一步成功、对象存在且类型正确，再取下标。"
+  }
+ ]
+\ No newline at end of file

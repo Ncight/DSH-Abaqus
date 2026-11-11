@@ -1,0 +1,28 @@
+{
+ "id": "x05_damped_free_vibration",
+ "title": "悬臂梁突然卸载后的有阻尼自由振动（瑞利阻尼换算 + 隐式动力 + 衰减识别）",
+ "split": "holdout",
+ "job": "decay",
+ "timeout_s": 2400,
+ "tags": ["dynamics", "implicit", "rayleigh-damping", "free-vibration", "log-decrement", "time-history", "hard"],
+ "expected": {
+  "first_frequency_Hz": 16.71,
+  "damping_ratio": 0.02,
+  "log_decrement": 0.1257,
+  "static_deflection_m": 1.1905e-3,
+  "tip_point": [1.0, 0.0, 0.0],
+  "min_free_vibration_s": 0.6,
+  "rayleigh_alpha_only": 4.200,
+  "rayleigh_beta_only": 3.810e-4
+ },
+ "tolerances": {
+  "probe_distance_m": 0.02,
+  "static_rel": 0.03,
+  "frequency_rel": 0.02,
+  "damping_rel": 0.10,
+  "interval_slack": 0.05,
+  "report_rel": 0.03,
+  "report_damping_rel": 0.15,
+  "report_rayleigh_rel": 0.15
+ }
+}

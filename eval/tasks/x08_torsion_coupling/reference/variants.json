@@ -1,0 +1,20 @@
+{
+ "variants": [
+  {"name": "default", "expect": "pass", "what": "C3D20R, 4 mm in the section x 25 along the axis, kinematic coupling of the whole end face, moment at the RP"},
+  {"name": "distributing", "expect": "pass", "what": "distributing coupling"},
+  {"name": "c3d8r_fine", "expect": "pass", "what": "C3D8R, 1.5 mm in the section x 40 along the axis"},
+  {"name": "c3d10_tet", "expect": "pass", "what": "free tetrahedral mesh C3D10, 6 mm"},
+  {"name": "coarse_c3d8r", "expect": "fail", "fails": ["max_shear_stress"], "passes": ["applied_torque"],
+   "what": "C3D8R 5 mm: centroid stresses 12 % below the surface value, faceted section"},
+  {"name": "radius_mixup", "expect": "fail", "fails": ["twist_angle", "max_shear_stress"], "passes": ["applied_torque"],
+   "what": "radius 0.04 instead of 0.02"},
+  {"name": "wrong_axis", "expect": "fail", "fails": ["twist_angle", "max_shear_stress"], "passes": ["applied_torque"],
+   "what": "moment about x: bending instead of torsion"},
+  {"name": "few_nodes_coupling", "expect": "fail", "fails": ["max_shear_stress"], "passes": ["applied_torque"],
+   "what": "RP coupled to four rim nodes only: local stress concentration and extra compliance"},
+  {"name": "tangential_forces", "expect": "fail", "fails": ["twist_angle"],
+   "what": "no RP, four tangential rim forces with the diameter as lever arm: 250 Nm"},
+  {"name": "fake_report", "expect": "fail", "fails": ["report_max_shear_stress_Pa"], "passes": ["twist_angle", "max_shear_stress"],
+   "what": "correct ODB, von Mises stress reported as the shear stress"}
+ ]
+}

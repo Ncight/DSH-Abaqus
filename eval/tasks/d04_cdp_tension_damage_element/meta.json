@@ -1,0 +1,35 @@
+{
+ "id": "d04_cdp_tension_damage_element",
+ "title": "混凝土损伤塑性（CDP）单元受拉加卸载：软化、刚度退化与损伤因子",
+ "suite": "domain",
+ "split": "tune",
+ "job": "cdp",
+ "timeout_s": 1800,
+ "tags": ["concrete", "cdp", "damage", "softening", "material-test", "unloading", "domain"],
+ "expected": {
+  "peak_stress_kPa": 2000.0,
+  "stress_at_0p0004_kPa": 857.14,
+  "unloading_modulus_kPa": 1.5857e7,
+  "stress_at_end_kPa": 369.86,
+  "damage_at_end": 0.7438,
+  "damage_at_0p0004": 0.4714,
+  "abaqus_2021_reference": {"stress_at_0p0004_kPa": [861.4, 865.3], "unloading_modulus_kPa": [1.5918e7, 1.5976e7], "stress_at_end_kPa": [372.6, 375.7], "damage_at_end": [0.7403, 0.7422]},
+  "strain_history": [0.0004, 0.00036, 0.0008],
+  "max_strain_step": 1.0e-5,
+  "edge_m": 0.1,
+  "load_point": [0.1, 0.0, 0.0],
+  "centre_point": [0.05, 0.05, 0.05]
+ },
+ "tolerances": {
+  "probe_distance_m": 0.01,
+  "strain_rel": 0.01,
+  "step_slack": 0.05,
+  "lateral_stress_ratio": 0.01,
+  "stress_rel": 0.03,
+  "modulus_rel": 0.03,
+  "end_stress_rel": 0.04,
+  "damage_rel": 0.02,
+  "report_rel": 0.02,
+  "report_modulus_rel": 0.03
+ }
+}

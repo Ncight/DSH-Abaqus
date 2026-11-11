@@ -1,0 +1,83 @@
+*HEADING
+ hand-written test of *NMAP rotation / translation / scale / diamond / shift (compared node by node with Abaqus)
+** Every node carries a MASS element, because the output database only keeps nodes that some element uses.
+**
+** ---- A. rotation by 40 degrees: axis direction (0,0,0)-(0,1,1), origin of rotation (1,0,0)
+*NODE, NSET=R1
+ 101, 1., 0., 0.
+ 102, 0., 2., 0.
+ 103, 1., 1., 3.
+*NMAP, NSET=R1, TYPE=ROTATION
+ 0., 0., 0., 0., 1., 1.
+ 1., 0., 0.
+ 40.
+**
+** ---- B. translation of 2.5 along the line (0,0,0)-(3,4,0)
+*NODE, NSET=T1
+ 201, 1., 0., 10.
+ 202, 0., 2., 10.
+ 203, 1., 1., 13.
+*NMAP, NSET=T1, TYPE=TRANSLATION
+ 0., 0., 0., 3., 4., 0.
+ 2.5
+**
+** ---- C. scale by (2, 3, 0.5) with respect to the point (1, 1, 20)
+*NODE, NSET=S1
+ 301, 1., 0., 20.
+ 302, 0., 2., 20.
+ 303, 1., 1., 23.
+*NMAP, NSET=S1, TYPE=SCALE
+ 1., 1., 20.
+ 2., 3., 0.5
+**
+** ---- D. skewed axes from a = (0,0,30): a-b along (1,0,0), a-c along (1,1,0), a-d along (0,1,1)
+*NODE, NSET=D1
+ 401, 1., 0., 0.
+ 402, 0., 2., 0.
+ 403, 1., 1., 3.
+*NMAP, NSET=D1, TYPE=DIAMOND
+ 0., 0., 30., 1., 0., 30.
+ 1., 1., 30., 0., 1., 31.
+ 1., 1., 1.
+**
+** ---- E. rectangular system given by nodes: origin 691, local x towards 692, 693 in the local x-y plane
+*NODE, NSET=N1
+ 601, 1., 0., 0.
+ 602, 0., 2., 0.
+ 603, 1., 1., 3.
+*NODE, NSET=DEFN
+ 691, 0., 0., 50.
+ 692, 0., 1., 50.
+ 693, -1., 0., 50.
+*NMAP, NSET=N1, TYPE=RECTANGULAR, DEFINITION=NODES
+ 691, 692
+ 693
+ 1., 1., 1.
+**
+*ELEMENT, TYPE=MASS, ELSET=MASSES
+ 101, 101
+ 102, 102
+ 103, 103
+ 201, 201
+ 202, 202
+ 203, 203
+ 301, 301
+ 302, 302
+ 303, 303
+ 401, 401
+ 402, 402
+ 403, 403
+ 601, 601
+ 602, 602
+ 603, 603
+ 691, 691
+ 692, 692
+ 693, 693
+*MASS, ELSET=MASSES
+ 1.0,
+*NSET, NSET=ALLN, ELSET=MASSES
+*BOUNDARY
+ ALLN, 1, 3
+*STEP
+*STATIC
+*END STEP

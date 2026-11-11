@@ -1,0 +1,15 @@
+{
+ "id": "x01_mixed_units_modal",
+ "title": "混合单位给定数据的简支梁固有频率（单位换算 + 三维简支边界）",
+ "split": "tune",
+ "job": "ssbeam_modal",
+ "timeout_s": 1500,
+ "tags": ["frequency", "modal", "unit-conversion", "boundary-conditions", "3d-modes", "hard"],
+ "expected": {
+  "frequencies_Hz": [15.49, 25.81]
+ },
+ "tolerances": {
+  "frequency_rel": 0.03,
+  "report_rel": 0.03
+ }
+}

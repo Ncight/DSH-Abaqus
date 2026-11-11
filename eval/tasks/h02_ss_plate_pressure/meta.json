@@ -1,0 +1,17 @@
+{
+ "id": "h02_ss_plate_pressure",
+ "title": "四边简支方板受均布压力（壳单元）",
+ "split": "holdout",
+ "job": "plate",
+ "timeout_s": 1200,
+ "tags": ["static", "linear", "shell-elements", "plate-bending", "boundary-conditions", "section-point-stress"],
+ "expected": {
+  "center_deflection_m": 2.1112e-4,
+  "max_bending_stress_Pa": 2.874e6
+ },
+ "tolerances": {
+  "center_deflection_rel": 0.03,
+  "max_bending_stress_rel": 0.05,
+  "report_rel": 0.03
+ }
+}

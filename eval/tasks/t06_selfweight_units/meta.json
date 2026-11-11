@@ -1,0 +1,22 @@
+{
+ "id": "t06_selfweight_units",
+ "title": "混凝土柱自重作用（m–t–s 单位制：kN / kPa / t·m⁻³）",
+ "split": "tune",
+ "job": "column",
+ "timeout_s": 1200,
+ "tags": ["static", "linear", "gravity", "unit-system", "boundary-conditions", "solid-3d"],
+ "expected": {
+  "base_reaction_kN": 245.0,
+  "top_settlement_m": 4.0833e-5,
+  "base_stress_kPa": -245.0,
+  "section_area_m2": 1.0
+ },
+ "tolerances": {
+  "base_reaction_rel": 0.01,
+  "top_settlement_rel": 0.03,
+  "base_stress_rel": 0.06,
+  "lateral_reaction_ratio_max": 0.02,
+  "report_rel": 0.03,
+  "report_stress_rel": 0.06
+ }
+}

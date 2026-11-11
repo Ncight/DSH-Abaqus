@@ -1,0 +1,1 @@
+{ "meta": { "title": "Abaqus review gate", "description": "In workspaces with the human review gate switched on, blocks direct abaqus solver launches so that every solve goes through abq run and the analyst's approval." } }
