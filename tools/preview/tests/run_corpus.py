@@ -65,6 +65,8 @@ EXPECT = {
     'checks/chk_rigid_body_motion.inp': {'must': [('warn', '刚体位移')]},
     'checks/chk_rigid_body_motion_contact.inp': {'must': [('info', '只能靠接触')], 'no': ['warn', 'error']},
     'checks/chk_unrestrained_instance.inp': {'must': [('warn', '刚体位移')]},
+    # official sample (only where fetched): rigid rods in sleeves held by MPCs touch on purpose, no "贴着却没连上"
+    'official/mpc_rigelem.inp': {'no': ['warn', 'error']},
 }
 
 

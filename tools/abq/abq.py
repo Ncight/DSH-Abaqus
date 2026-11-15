@@ -12,6 +12,7 @@
     abq verify <job>               收工前核查
     abq sweep <file.py> --set SEED=0.02,0.01   同一脚本多组参数依次求解并对比（网格收敛、方案比选）
     abq render <file.odb|file.inp> 出图 (PNG)
+    abq mesh <file.inp>            网格质量体检（单元构成、质量指标、尺寸突变、最差单元；--abaqus 用 Abaqus 自带检查复核）
     abq examples / fetch           检索、取出 Abaqus 官方算例
     abq api <名字>                 查本机 Abaqus 脚本接口的真实签名
     abq rpy                        查看 CAE 回放文件里的脚本命令
@@ -228,7 +229,9 @@ def preview_line():
 # ---------------------------------------------------------------------------- gate
 def gate_mode(root):
     env = os.environ.get('ABQ_GATE')
-    if env:
+    # 智能体的命令（DSH 会给它们带上 DSH_* 环境变量）里，ABQ_GATE 不能用来关闸门，只看工作区配置
+    agent = any(os.environ.get(k) for k in ('DSH_SESSION_ID', 'DSH_PTY_SESSION_ID', 'DSH_SHELL'))
+    if env and not agent:
         return env.lower()
     cfg = os.path.join(root, '.abq', 'config.json')
     if os.path.isfile(cfg):
@@ -541,6 +544,9 @@ def cmd_script(a):
                     rc = 1
             except Exception as e:
                 P('INP 解析失败: %s: %s' % (type(e).__name__, e))
+            mesh_line = mesh_brief(os.path.join(cwd, f))
+            if mesh_line:
+                P(mesh_line)
     if not failed and any(f.lower().endswith('.inp') for f in keep):
         P(preview_line(), '下一步: abq check <inp>（看完整摘要）→ abq datacheck <inp> → abq run <inp>')
     return rc
@@ -1359,6 +1365,192 @@ def cmd_render(a):
     return 0
 
 
+# ---------------------------------------------------------------------------- mesh quality
+def _g(x, n=3):
+    if not isinstance(x, (int, float)):
+        return str(x)
+    if x != 0 and abs(x) < 1e-3:
+        return '<0.001' if x > 0 else fnum(x, n)
+    if abs(x) >= 1e6:
+        return '%.3g' % x
+    return fnum(x, n)
+
+
+def mesh_brief(path):
+    """一行网格质量摘要（abq script 导出 INP 后自动给出）；读不了就返回 None，不影响主流程"""
+    try:
+        import abq_mesh
+        r = abq_mesh.analyze(path, worst=1)
+    except Exception:
+        return None
+    if not r['evaluated']:
+        return None
+    bits = ['%d 单元' % r['evaluated']]
+    if 'hex_pct' in r:
+        bits.append('实体六面体 %.0f%%' % r['hex_pct'])
+    if 'quad_pct' in r:
+        bits.append('壳四边形 %.0f%%' % r['quad_pct'])
+    bits.append('推荐值达标 %.1f%%' % r['good_pct'])
+    bits.append('超 Abaqus 默认阈值 %d' % r['abaqus_fail'])
+    if r['inverted']:
+        bits.append('翻转 %d（必须修）' % r['inverted'])
+    tag = {'PASS': '通过', 'WARN': '有警告', 'FAIL': '不通过'}[r['verdict']]
+    return '网格质量：%s — %s；详情 abq mesh %s' % (tag, '，'.join(bits), os.path.basename(path))
+
+
+def cmd_mesh(a):
+    path = os.path.abspath(a.target)
+    if not os.path.isfile(path) and os.path.isfile(path + '.inp'):
+        path += '.inp'
+    if not os.path.isfile(path) or not path.lower().endswith('.inp'):
+        P('找不到 INP：%s' % a.target, '网格体检读的是 INP。CAE 脚本里先 writeInput() 导出，再对导出的 INP 运行 abq mesh。')
+        return 2
+    try:
+        import abq_mesh
+    except ImportError as e:
+        P('网格体检需要 numpy：%s' % e)
+        return 2
+    t0 = time.time()
+    try:
+        r = abq_mesh.analyze(path, force=a.force, worst=a.worst)
+    except Exception as e:      # TooLargeError / MemoryRefusedError / 解析错误
+        P('读取 INP 失败：%s' % e, '文件很大时加 --force（仍会检查本机内存）。')
+        return 2
+    sec = time.time() - t0
+    fam = r['families']
+    cn = abq_mesh.FAM_CN
+    lines = ['网格体检  %s' % os.path.basename(path),
+             '规模：%d 节点，%d 单元（参与质量评估 %d）；%s' % (
+                 r['nodes'], r['elements'], r['evaluated'],
+                 '，'.join('%s %d' % (cn.get(k, k), v) for k, v in sorted(fam.items(), key=lambda kv: -kv[1])))]
+    extra = []
+    if 'hex_pct' in r:
+        extra.append('实体中六面体 %.1f%%（按体积 %.1f%%）' % (r['hex_pct'], r['hex_vol_pct']))
+    if 'quad_pct' in r:
+        extra.append('壳中四边形 %.1f%%' % r['quad_pct'])
+    o = r['order']
+    if o['first'] or o['second']:
+        extra.append('一阶 %d / 二阶 %d' % (o['first'], o['second']))
+    if extra:
+        lines.append('构成：' + '；'.join(extra))
+    if r['skipped']:
+        lines.append('未评质量（界面/刚体/连接等）：' + '，'.join('%s %d' % kv for kv in r['skipped'].items()))
+    s = r.get('size') or {}
+    if s:
+        lines.append('尺寸：特征边长 最小 %s / 中位 %s / 最大 %s；相邻单元尺寸比 最大 %s，>2 的节点 %.1f%%，>3 的节点 %.1f%%' % (
+            _g(s['min']), _g(s['median']), _g(s['max']), _g(s['jump_max']), s['jump_gt2_pct'], s['jump_gt3_pct']))
+    se = r.get('shell_edges')
+    if se:
+        txt = '壳的边：自由边 %d 段' % se['free']
+        if se['free']:
+            txt += '，总长 %s，连成 %d 条' % (_g(se['free_length']), se['loops'])
+            if se.get('coincident_nodes'):
+                txt += '；其中 %d 个节点和别的节点重合却没合并（两块网格没连上的缝）' % se['coincident_nodes']
+        if se['nonmanifold']:
+            txt += '；3 个以上单元共用的边 %d 条（T 形连接）' % se['nonmanifold']
+        lines.append(txt)
+        for lp in se.get('loop_list', [])[:6]:
+            lines.append('  自由边 %d 段，长 %s，范围 (%s) ~ (%s)' % (
+                lp['segments'], _g(lp['length']), ', '.join(_g(v, 4) for v in lp['lo']), ', '.join(_g(v, 4) for v in lp['hi'])))
+        if se['free']:
+            lines.append('  自由边应只出现在真实的开口和边界上（对称面、进出口、板边）；出现在两块面的交线上说明网格没连上。')
+    lines.append('')
+    lines.append('%-10s %-8s %10s %10s %20s %20s' % ('单元族', '指标', '最差', '中位', '超 Abaqus 默认阈值', '未达推荐值'))
+    for f, mm in r['metrics'].items():
+        n_f = fam.get(f, 1)
+        for k in ('sjac', 'aspect', 'angle_min', 'angle_max', 'shape', 'warp'):
+            if k not in mm:
+                continue
+            v = mm[k]
+            ab = ('%d (%.2f%%) 限%s' % (v['abaqus_fail'], 100.0 * v['abaqus_fail'] / n_f, fnum(v['abaqus_limit'], 3))) if 'abaqus_fail' in v else '-'
+            gd = ('%d (%.2f%%) 限%s' % (v['good_fail'], 100.0 * v['good_fail'] / n_f, fnum(v['good_limit'], 3))) if 'good_fail' in v else '-'
+            lines.append('%-10s %-8s %10s %10s %20s %20s' % (cn.get(f, f), abq_mesh.METRIC_CN[k], _g(v['worst']),
+                                                          _g(v['median']), ab, gd))
+        if mm.get('inverted'):
+            lines.append('%-10s 翻转/退化单元 %d 个（积分点雅可比 <= 0，求解器会拒绝）' % (cn.get(f, f), mm['inverted']))
+        if mm.get('corner_negative'):
+            lines.append('%-10s 角点雅可比为负 %d 个（凹角或折叠，严重畸变，求解器一般报警告）' % (cn.get(f, f), mm['corner_negative']))
+    if len(r['instances']) > 1:
+        lines.append('')
+        lines.append('按实例（坏单元多的在前）：')
+        rank = lambda kv: -(kv[1]['inverted'] * 1e12 + kv[1]['abaqus_fail'] * 1e6 + kv[1]['good_fail'])
+        for name, v in sorted(r['instances'].items(), key=rank)[:a.top]:
+            lines.append('  %-28s %8d 单元  翻转 %d  超Abaqus %d  未达推荐 %d  [%s]' % (
+                name, v['elements'], v['inverted'], v['abaqus_fail'], v['good_fail'],
+                ' '.join('%s%d' % (cn.get(k, k), c) for k, c in v['families'].items())))
+        if len(r['instances']) > a.top:
+            lines.append('  …… 共 %d 个实例，完整列表见 JSON' % len(r['instances']))
+    if r['worst']:
+        lines.append('')
+        lines.append('最差单元（按离推荐值多远排序）：')
+        for w in r['worst']:
+            lines.append('  %s 单元 %d (%s)  %s = %s%s  形心 (%s)' % (
+                w['instance'] or '-', w['label'], w['type'], abq_mesh.METRIC_CN.get(w['metric'], w['metric']), _g(w['value']),
+                '  [翻转]' if w['inverted'] else '', ', '.join(_g(c, 4) for c in w['centroid'])))
+    lines.append('')
+    verdict = {'PASS': '通过：没有翻转单元，也没有超过 Abaqus 默认阈值的单元',
+               'WARN': '有警告：%d 个单元超过 Abaqus 默认阈值，求解可能报畸变警告或局部精度下降，先看最差单元在哪' % r['abaqus_fail'],
+               'FAIL': '不通过：%d 个翻转/退化单元，求解器会拒绝，必须先修网格' % r['inverted']}[r['verdict']]
+    lines.append('推荐值达标率 %.2f%%（%d 个单元至少一项未达推荐值）' % (r['good_pct'], r['good_fail']))
+    lines.append('结论：' + verdict)
+
+    if a.abaqus:
+        out = os.path.splitext(path)[0] + '_meshchk_abaqus.json'
+        pf = os.path.join(os.path.dirname(path), '_meshchk_params.json')
+        with open(pf, 'w', encoding='utf-8') as f:
+            json.dump({'path': path, 'out': out}, f)
+        log = os.path.join(os.path.dirname(path), '_meshchk.log')
+        code, to, sec2, text = run_abaqus(['cae', 'noGUI=' + os.path.join(HERE, 'cae_meshcheck.py'), '--', pf],
+                                          os.path.dirname(path), log, a.timeout, env={'ABAQUS_USE_LOCALIZATION': '0'})
+        try:
+            os.remove(pf)
+        except OSError:
+            pass
+        lines.append('')
+        if os.path.isfile(out) and os.path.getmtime(out) > time.time() - sec2 - 5:
+            with open(out, encoding='utf-8') as f:
+                ab = json.load(f)
+            r['abaqus_check'] = ab
+            keys = ('aspect', 'shape_tet', 'shape_tri', 'small_angle_hex', 'small_angle_quad', 'small_angle_tet',
+                    'small_angle_tri', 'large_angle_hex', 'large_angle_quad', 'large_angle_tet', 'large_angle_tri')
+            tot = {'err': 0, 'warn': 0}
+            per = []
+            for pn, pv in ab.items():
+                an = pv.get('analysis', {})
+                e, w = an.get('failedElements', 0) or 0, an.get('warningElements', 0) or 0
+                tot['err'] += e
+                tot['warn'] += w
+                bits = []
+                for k in keys:
+                    n = (pv.get(k) or {}).get('failedElements') or 0
+                    tot[k] = tot.get(k, 0) + n
+                    if n:
+                        bits.append('%s %d' % (k, n))
+                per.append((e, w, pn, pv.get('elements', 0), bits))
+            lines.append('Abaqus 自带检查（verifyMeshQuality，%d 个部件，%.0f s）：' % (len(ab), sec2))
+            lines.append('  分析检查（求解器会报的）：错误 %d 个单元，警告 %d 个单元' % (tot['err'], tot['warn']))
+            lines.append('  按默认阈值：' + ('，'.join('%s %d' % (k, tot[k]) for k in keys if tot.get(k)) or '全部为 0'))
+            per.sort(key=lambda t: (-t[0], -t[1]))
+            shown = [t for t in per if t[0] or t[1]][:a.top]
+            for e, w, pn, n, bits in shown:
+                lines.append('  %-28s %7d 单元  错误 %d  警告 %d  %s' % (pn, n, e, w, '；'.join(bits)))
+            r['abaqus_errors'] = tot['err']
+            r['abaqus_warnings'] = tot['warn']
+            if tot['err']:
+                r['verdict'] = 'FAIL'
+                lines.append('  结论改为不通过：Abaqus 分析检查有 %d 个错误单元，求解器会拒绝，必须先修。' % tot['err'])
+        else:
+            tail = [l for l in text.splitlines() if l.strip() and 'icense' not in l][-8:]
+            lines.append('Abaqus 自带检查没有完成：' + (' | '.join(tail) if tail else '超时' if to else '无输出'))
+
+    jp = a.json or (os.path.splitext(path)[0] + '_mesh.json')
+    with open(jp, 'w', encoding='utf-8') as f:
+        json.dump(r, f, ensure_ascii=False, indent=1)
+    lines.append('明细已写入 %s（%.1f s）' % (jp, sec))
+    P(*lines)
+    return 1 if r['verdict'] == 'FAIL' else 0
+
+
 # ---------------------------------------------------------------------------- examples / fetch
 def load_gz(name):
     p = os.path.join(DATA, name)
@@ -1637,6 +1829,13 @@ def cmd_units(a):
 def cmd_gate(a):
     root = workspace_root(os.getcwd())
     cfg = os.path.join(root, '.abq', 'config.json')
+    agent = any(os.environ.get(k) for k in ('DSH_SESSION_ID', 'DSH_PTY_SESSION_ID', 'DSH_SHELL'))
+    if a.action == 'off' and agent:
+        # 关闸门只能由人在自己的终端里做：DeepSeek Harness 给智能体跑的命令带着 DSH_* 会话变量
+        P('⛔ 人工审查闸门只能由用户在自己的终端里关闭，智能体不能关。',
+          '需要求解时：停下来向用户说明模型要点（几何、材料、网格、约束、载荷），请用户在预览面板里批准；',
+          '不要尝试改配置文件或环境变量来绕过。只做数据检查用 abq datacheck，它不受闸门限制。')
+        return 3
     if a.action in ('on', 'off'):
         os.makedirs(os.path.dirname(cfg), exist_ok=True)
         data = {}
@@ -1652,7 +1851,10 @@ def cmd_gate(a):
     mode = gate_mode(root)
     P('工作区: %s' % root, '人工审查闸门: %s' % ('开（abq run 需要用户先在预览面板里批准该 INP）' if mode == 'human' else '关（abq run 不需要批准）'))
     if os.environ.get('ABQ_GATE'):
-        P('（当前由环境变量 ABQ_GATE=%s 决定）' % os.environ['ABQ_GATE'])
+        if any(os.environ.get(k) for k in ('DSH_SESSION_ID', 'DSH_PTY_SESSION_ID', 'DSH_SHELL')):
+            P('（环境变量 ABQ_GATE=%s 在智能体的命令里不起作用，以工作区配置为准）' % os.environ['ABQ_GATE'])
+        else:
+            P('（当前由环境变量 ABQ_GATE=%s 决定）' % os.environ['ABQ_GATE'])
     return 0
 
 
@@ -1750,6 +1952,16 @@ def main(argv=None):
     s.add_argument('--height', type=int, default=900)
     s.add_argument('--timeout', type=int, default=600)
     s.set_defaults(fn=cmd_render)
+
+    s = sub.add_parser('mesh', help='网格质量体检：单元构成、长宽比/角度/雅可比/形状因子、尺寸突变、最差单元')
+    s.add_argument('target', help='.inp（CAE 脚本先 writeInput 导出）')
+    s.add_argument('--worst', type=int, default=10, help='列出最差单元的个数')
+    s.add_argument('--top', type=int, default=15, help='按实例列表最多显示几行')
+    s.add_argument('--abaqus', action='store_true', help='再用 Abaqus 自带 verifyMeshQuality 复核（启动 CAE，较慢）')
+    s.add_argument('--force', action='store_true', help='大文件也读（仍检查内存）')
+    s.add_argument('--json', help='明细 JSON 路径（默认 <INP名>_mesh.json）')
+    s.add_argument('--timeout', type=int, default=1800)
+    s.set_defaults(fn=cmd_mesh)
 
     s = sub.add_parser('examples', help='检索官方算例')
     s.add_argument('--kw', action='append', help='INP 关键字，可多次（都要出现），如 "*TIE"')

@@ -20,7 +20,7 @@
 1. 双击 `tools\preview\start_preview.cmd` 启动预览面板。在 DSH 里按 Ctrl+T 打开右侧栏的浏览器标签，输入 `127.0.0.1:8765`，面板就在对话旁边；它自动显示工作区里最新的 INP。想让面板开机自启：运行一次 `tools\preview\autostart_install.cmd`（撤销用 `autostart_remove.cmd`）。
 2. 在 DSH 里描述仿真需求。模型按 `AGENTS.md` 的流程走：弄清需求 → 先估算 → 建模得到 INP → **等你审查** → 求解（工具自动给出结果摘要和核查结论）→ 与估算对比 → 先交付后优化 → 汇报。
 3. 模型说"请在预览面板审查"时，在面板里看几何、边界、载荷、接触和体检结果，点「批准求解」或「退回修改」（可以对着具体参数写标注）。批准针对的是这一份 INP 的内容，INP 一改就要重审。
-4. 不想每次都审：在工作区里运行 `abq.cmd gate off`；恢复用 `abq.cmd gate on`。
+4. 不想每次都审：在你自己的终端里、在工作区里运行 `abq.cmd gate off`；恢复用 `abq.cmd gate on`。DSH 里的模型运行 `gate off` 会被拒绝。
 
 ## 工具箱 abq
 
@@ -29,6 +29,7 @@
 ```
 abq script model.py        运行 CAE 脚本（无界面），新导出的 INP 自动体检
 abq check job.inp          静态体检 + 模型摘要（不调用 Abaqus）；自己生成的 INP 先过这一步
+abq mesh job.inp           网格体检：单元构成、长宽比/角度/雅可比/形状因子、尺寸突变、最差单元在哪、壳的自由边；--abaqus 再用 Abaqus 自带检查复核
 abq datacheck job          求解器数据检查
 abq run job                求解；失败时给出错误原文、残差位置和针对性提示，成功时给出结果摘要和核查结论
 abq odb job.odb            结果摘要：最值及位置、反力合计、能量、频率
@@ -53,6 +54,7 @@ abq cases 接触             检索已验证案例库
 - `abq run` 在闸门开启时核对 `.abq/review.json`：这份 INP（按内容的 SHA-256）被批准过才求解。
 - `abq script` 在闸门开启时拒绝含 `.submit(` 的建模脚本；`abq sweep` 要求基准模型已获批准。
 - 装上 `dsh-plugin\abq-gate` 插件后，DSH 直接拒绝模型在该工作区里绕过工具调用 `abaqus job=…` 或 `abaqus cae …`。安装：运行 `dsh-plugin\install.cmd`，然后重启 DSH；卸载：`dsh plugin --profile desktop remove @local/abq-gate`。不装插件时，前两条仍然有效，但模型理论上可以直接调用 abaqus 绕过。
+- 闸门只有人能关。DSH 给模型跑的命令都带着 `DSH_*` 会话环境变量：在这种命令里 `abq gate off` 直接拒绝，环境变量 `ABQ_GATE` 也不起作用；插件还拦截模型改写 `.abq` 下的配置和批准记录（命令和文件工具都拦）。实拍中 Flash 曾以"会话权限是不再询问"为由自己运行 `abq gate off`，所以补了这一条。
 - 回归测试：`py tools\preview\tests\gate_e2e.py`（面板写入审查结论 → 工具读取；需要面板在运行）。
 
 ## 评测与自动改进
@@ -67,7 +69,7 @@ py eval\optimize.py cycle --name cyc1 --suite basic,hard --repeats 2 --parallel 
 
 - 评测题在 `eval/tasks/`，分三组：基础组（`t*`、`h*`，11 道）、难题组（`x*`，8 道）、专业组（`d*`，岩土/抗震/混凝土损伤，8 道）。每题有任务书、带解析解或独立数值解的检查脚本、参考解和故意做错的反例。检查脚本自己从结果库取数，不相信模型写的数字。`py eval\validate_tasks.py` 用参考解和反例验证检查脚本本身。
 - 每组题都分调优集（tune）和保留集（holdout）。自动改进时，更强的模型只看调优集的失败记录，修改 `AGENTS.md`、skills 和提示表的副本；副本要么在调优集上明显更准，要么不变差且平均耗时至少降 15%，并且保留集不变差、没有题目从全过变成全挂，才会合并进来并提交到 git。每个候选（无论是否采纳）的改动说明和差异都存在 `eval/history/<名字>/`。工具代码、评测题和检查脚本不会被自动修改。
-- 自动候选会写错接口：第一轮里强模型给出的两段代码实跑都是错的。所以写进 skill 的代码必须有对应的实跑脚本：`py eval\skill_checks\run_all.py` 跑全部 19 条验证链，`py eval\skill_snippets.py --calls` 核对 skill 里的每个接口名都在跑通的脚本里出现过。改 skill、改工具、升级 Abaqus 之后都应重跑。
+- 自动候选会写错接口：第一轮里强模型给出的两段代码实跑都是错的。所以写进 skill 的代码必须有对应的实跑脚本：`py eval\skill_checks\run_all.py` 跑全部 20 条验证链，`py eval\skill_snippets.py --calls` 核对 skill 里的每个接口名都在跑通的脚本里出现过。改 skill、改工具、升级 Abaqus 之后都应重跑。
 - 分析一次运行：`py eval\trace.py <tag> <题目__rN>` 看步骤，`py eval\step.py … 19` 看某一步的完整输入输出，`py eval\timeline.py <tag>` 看时间花在哪（模型思考、求解、读结果），`py eval\step_errors.py <tag…>` 统计脚本报错，`py eval\rescore.py <tag…>` 在检查脚本改动后重新判分。
 - 评测进程以低优先级运行，内存紧张时自动等待。
 
@@ -121,14 +123,14 @@ py eval\optimize.py cycle --name cyc1 --suite basic,hard --repeats 2 --parallel 
 这套东西是在一台 Windows 10、Abaqus 2021、DeepSeek Harness 0.2.2 的机器上做的，路径写死了几处，换机器要改：
 
 - 工作区放在 `E:\DSH-Abaqus` 最省事。放在别处时，把 `AGENTS.md`、`.dsh/skills/`、`dsh-plugin/` 和 `eval/` 里出现的 `E:\DSH-Abaqus` 换成你的路径（`git grep -lF "E:\DSH-Abaqus"` 列出这些文件）。
-- Abaqus 的位置用环境变量指定：`ABAQUS_BAT`（默认 `D:\SIMULIA\Commandsbaqus.bat`）、`ABQ_SAMPLES_ZIP`（官方算例包 `samples.zip` 的位置）。
-- DSH 命令行的位置在 `dsh-plugin\install.cmd` 和 `eval\dshrun.py` 里（默认 `D:\DSHesourcesuntime\cliin\dsh.cmd`）。
+- Abaqus 的位置用环境变量指定：`ABAQUS_BAT`（默认 `D:\SIMULIA\Commands\abaqus.bat`）、`ABQ_SAMPLES_ZIP`（官方算例包 `samples.zip` 的位置）。
+- DSH 命令行的位置在 `dsh-plugin\install.cmd` 和 `eval\dshrun.py` 里（默认 `D:\DSH\resources\runtime\cli\bin\dsh.cmd`）。
 - 仓库里**不含任何 Abaqus 自带的内容**（官方算例、接口文档都是达索的）。克隆后用你自己的 Abaqus 在本地生成两个索引，否则 `abq api` 和 `abq examples` 会提示索引尚未建立：
 
   ```
   abq.cmd build-api                          脚本接口签名索引（约几分钟）
-  py toolsbquild_samples_index.py        官方算例索引
-  py examples\corpusetch_official.py       可选：预览面板测试用到的 37 个官方算例
+  py tools\abq\build_samples_index.py        官方算例索引
+  py examples\corpus\fetch_official.py       可选：预览面板测试用到的 37 个官方算例
   ```
 
 - 评测脚本从 `~/.dsh/.credentials.yaml` 读你自己的 DeepSeek API key，仓库里没有任何 key。跑评测很费 token：专业组一种配置跑 2 遍约 4400 万～9300 万缓存输入 token。

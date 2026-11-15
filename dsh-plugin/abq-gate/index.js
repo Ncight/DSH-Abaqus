@@ -16,6 +16,9 @@ export const inject = ['tools', 'workingDirectory']
 const RAW = /(?:^|[\s;&|(`'"=])(?:[A-Za-z]:)?[\w\\/.-]*?abaqus(?:\.bat|\.exe)?["']?\s+[^\n;|&]*?\b(job\s*=|cae\b|standard\b|explicit\b)/i
 // harmless uses of `abaqus job=...`
 const HARMLESS = /\b(datacheck|syntaxcheck|information\s*=|fetch\b|findkeyword|whereami|terminate|suspend|resume)\b/i
+// switching the gate off, overriding it through the environment, or touching its config / approval records
+const TAMPER = /\babq(?:\.cmd|\.py)?["']?\s+gate\s+off\b|\bABQ_GATE\b|[\\/]\.abq[\\/](?:config|review)\.json/i
+const GATE_DIR = /[\\/]\.abq[\\/]/
 
 function gatedRoot(start) {
   let dir = start
@@ -37,7 +40,24 @@ function gatedRoot(start) {
   return undefined
 }
 
+const TAMPER_MSG = '人工审查闸门由用户掌管，智能体不能关闭或绕过它（不能运行 abq gate off、不能设 ABQ_GATE、不能改 .abq 下的配置和批准记录）。' +
+  '需要求解时：停下来向用户说明模型要点，请用户在预览面板里批准；只做数据检查用 abq datacheck。'
+
+export function tamperDenial(command, cwd) {
+  if (typeof command !== 'string' || !TAMPER.test(command)) return undefined
+  return gatedRoot(cwd) === undefined ? undefined : TAMPER_MSG
+}
+
+// file tools (write / edit ...) aimed at the gate's own records
+export function fileDenial(path, cwd) {
+  if (typeof path !== 'string' || path === '') return undefined
+  const full = isAbsolute(path) ? path : resolve(cwd, path)
+  return GATE_DIR.test(full) && gatedRoot(cwd) !== undefined ? TAMPER_MSG : undefined
+}
+
 export function denialFor(command, cwd) {
+  const tamper = tamperDenial(command, cwd)
+  if (tamper !== undefined) return tamper
   if (typeof command !== 'string' || !RAW.test(command) || HARMLESS.test(command)) return undefined
   const root = gatedRoot(cwd)
   if (root === undefined) return undefined
@@ -48,12 +68,18 @@ export function denialFor(command, cwd) {
 
 export function apply(ctx) {
   ctx.tools.guard((exec) => {
-    if (exec.name !== 'pwsh' && exec.name !== 'bash') return undefined
     const args = exec.arguments ?? {}
     let cwd
     try {
       cwd = ctx.workingDirectory.get(exec.agent.session)
     } catch {
+      return undefined
+    }
+    if (exec.name !== 'pwsh' && exec.name !== 'bash') {
+      for (const key of ['path', 'file_path', 'filePath', 'target']) {
+        const deny = fileDenial(args[key], cwd)
+        if (deny !== undefined) return deny
+      }
       return undefined
     }
     if (typeof args.workdir === 'string' && args.workdir !== '') {

@@ -54,6 +54,9 @@ CHECKS = [
     ('viscous base, consolidation, undrained strength, CDP tension (keyword form)', 'abaqus-geotech',
      [('syspy', 'gen_geotech_inp.py'), ('run', 'geo_wave'), ('run', 'geo_consol'), ('run', 'geo_mc'), ('run', 'geo_cdp'),
       ('python', 'chk_geotech_read.py')], 'GEOTECH OK'),
+    ('abq mesh counts match Abaqus verifyMeshQuality', 'abaqus-elements-mesh',
+     [('script', 'snip_mesh.py'), ('mesh', 'snip_mesh.inp --abaqus'), ('syspy', os.path.join(ROOT, 'tools', 'abq', 'test_mesh.py')), ('syspy', 'chk_mesh.py')],
+     'MESH OK'),
 ]
 
 

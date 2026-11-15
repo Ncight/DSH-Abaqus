@@ -4130,7 +4130,7 @@ class Model(object):
         return n2s or s['kind'] in ('node', 'nset') or m['kind'] in ('node', 'nset')
 
     def _check_ties(self, add):
-        for tie in self.ties[:200]:
+        for tie in self.ties[:TIE_CHECK_CAP]:
             if pget(tie['params'], 'CYCLIC SYMMETRY') is not None:
                 continue                                   # the two surfaces are one sector apart by design
             s, m = self._surf_info(tie['slave']), self._surf_info(tie['master'])
@@ -4203,8 +4203,8 @@ class Model(object):
                 if st['n'] < st['total']:
                     msg += '; 从面共 %d 个节点, 抽查了 %d 个' % (st['total'], st['n'])
                 add('warn', msg)
-        if len(self.ties) > 200:
-            add('info', 'Tie 共 %d 个, 间隙检查只做了前 200 个' % len(self.ties))
+        if len(self.ties) > TIE_CHECK_CAP:
+            add('info', 'Tie 共 %d 个, 间隙检查只做了前 %d 个' % (len(self.ties), TIE_CHECK_CAP))
 
     def _exact_distance(self, nodes, name):
         """distance from a few nodes to every facet of a surface (brute force) -> list"""
@@ -4367,6 +4367,187 @@ class Model(object):
                 link(nodes, soft, False, more)
         self._links_cache = (hard, soft, find, gc_all, embed_all)
         return self._links_cache
+
+    def _check_facing_gaps(self, add):
+        """solid meshes whose outer faces face each other across a small gap (or touch) although no Tie or
+        contact pair has one face on each side: the two pieces are not connected there.  Bodies are the
+        connected pieces of the solid mesh (shared nodes), so it also works for flat inputs without instances.
+        Found on a soil/station model whose soil cavity was 3.5 cm off the wall and simply left out of the
+        Tie surface (2026-11-14) - the Tie gap check cannot see faces that are in no Tie at all.
+        Bodies held together some other way - a constraint (MPC, coupling, equation, rigid body ...) or an
+        element that is not solid (shell, beam, spring, connector) with nodes on both - are left alone:
+        mechanisms built that way touch on purpose (official sample mpc_rigelem: rigid rods in sleeves)."""
+        hard, soft, find, gc_all, embed_all = self._entity_links()
+        if gc_all or embed_all:
+            return
+        m = self.mesh
+        codes, off, nodes = m.e_code, m.e_off, m.e_nodes
+        fams = self.fams
+        coords = self.coords
+        pe, pc, le, qe = self._skin()
+        faces = [(pe[k], pc[k]) for k in range(len(pe)) if fams[codes[pe[k]]][0] in FACING_SOLID]
+        if not faces:
+            return
+        if len(faces) > FACING_FACE_CAP:
+            add('info', '实体外表面有 %d 个面, 超过 %d 个, 没有检查"贴着却没连上"' % (len(faces), FACING_FACE_CAP))
+            return
+        parent = list(range(len(m.n_label)))
+
+        def root(a):
+            while parent[a] != a:
+                parent[a] = parent[parent[a]]
+                a = parent[a]
+            return a
+        for e in range(len(codes)):
+            if fams[codes[e]][0] in FACING_SOLID:
+                o, o1 = off[e], off[e + 1]
+                r0 = root(nodes[o])
+                for g in nodes[o + 1:o1]:
+                    r = root(g)
+                    if r != r0:
+                        parent[r] = r0
+        link = parent[:]                     # bodies, further joined by constraints and non-solid elements
+
+        def held(a):
+            while link[a] != a:
+                link[a] = link[link[a]]
+                a = link[a]
+            return a
+
+        def hold(ns):
+            r0 = None
+            for g in ns:
+                r = held(g)
+                if r0 is None:
+                    r0 = r
+                elif r != r0:
+                    link[r] = r0
+        for con in self.constraints:
+            groups = con.get('_groups')
+            for grp in (groups if groups is not None else (self._con_nodes.get(con['id'], ()),)):
+                hold(grp)
+        for e in range(len(codes)):
+            if fams[codes[e]][0] not in FACING_SOLID:
+                hold(nodes[off[e]:off[e + 1]])
+        # faces and nodes held by each side of each Tie / contact pair / general contact pair
+        pairs_def = [(it.get('slave') or '', it.get('master') or '') for it in self.ties]
+        pairs_def += [(cp.get('slave') or '', cp.get('master') or cp.get('slave') or '') for cp in self.contact_pairs]
+        if self.general_contact:
+            pairs_def += [(r[0], r[1]) for r in self.gcontact['inclusions'] if len(r) > 1 and r[0] and r[1]]
+        face_side, node_side = {}, {}
+        for t, names in enumerate(pairs_def):
+            for sd, nm in enumerate(names):
+                if not nm:
+                    continue
+                ent = self.find_surface(nm)
+                if ent is not None and len(ent['fe']):
+                    for e, c in zip(ent['fe'], ent['ff']):
+                        face_side.setdefault(e * 16 + c, set()).add((t, sd))
+                else:
+                    for g in (self.surface_nodes(nm) or ()):
+                        node_side.setdefault(g, set()).add((t, sd))
+        face_nodes = self.face_nodes
+        rec = []                  # (cx, cy, cz, nx, ny, nz, area, size, body, sides, element, held together)
+        for e, c in faces:
+            f = face_nodes(e, c)
+            if f is None or len(f) < 3:
+                continue
+            p = [coords[g] for g in f]
+            n_ = float(len(p))
+            cx = sum(q[0] for q in p) / n_
+            cy = sum(q[1] for q in p) / n_
+            cz = sum(q[2] for q in p) / n_
+            nx = ny = nz = 0.0                 # Newell area vector, out of the element
+            for i in range(len(p)):
+                a, b = p[i], p[(i + 1) % len(p)]
+                nx += (a[1] - b[1]) * (a[2] + b[2])
+                ny += (a[2] - b[2]) * (a[0] + b[0])
+                nz += (a[0] - b[0]) * (a[1] + b[1])
+            a2 = math.sqrt(nx * nx + ny * ny + nz * nz)
+            if a2 <= 0:
+                continue
+            sides = set(face_side.get(e * 16 + c, ()))
+            for g in f:
+                s_ = node_side.get(g)
+                if s_:
+                    sides |= s_
+            rb = root(f[0])
+            rec.append((cx, cy, cz, nx / a2, ny / a2, nz / a2, a2 / 2, math.sqrt(a2 / 2), rb, sides, e, held(rb)))
+        if not rec:
+            return
+        sizes = sorted(r[7] for r in rec)
+        h = sizes[len(sizes) // 2] or 1.0
+        cell = 2.0 * h
+        grid = {}
+        for i, r in enumerate(rec):
+            grid.setdefault((int(math.floor(r[0] / cell)), int(math.floor(r[1] / cell)), int(math.floor(r[2] / cell))), []).append(i)
+
+        def joined(sa, sb):
+            for (t, sd) in sa:
+                if (t, 1 - sd) in sb:
+                    return True
+            return False
+        pairs = {}
+        for a in rec:
+            kx, ky, kz = int(math.floor(a[0] / cell)), int(math.floor(a[1] / cell)), int(math.floor(a[2] / cell))
+            reach = int(math.ceil(max(a[7], h) / cell))
+            best = None
+            done = False
+            for dx in range(-reach, reach + 1):
+                for dy in range(-reach, reach + 1):
+                    for dz in range(-reach, reach + 1):
+                        for j in grid.get((kx + dx, ky + dy, kz + dz), ()):
+                            b = rec[j]
+                            if b[11] == a[11] or a[3] * b[3] + a[4] * b[4] + a[5] * b[5] > -0.9:
+                                continue
+                            vx, vy, vz = b[0] - a[0], b[1] - a[1], b[2] - a[2]
+                            gap = vx * a[3] + vy * a[4] + vz * a[5]
+                            if gap < -1e-9 * h or gap > FACING_GAP_FRAC * min(a[7], b[7]):
+                                continue
+                            if math.sqrt(max(0.0, vx * vx + vy * vy + vz * vz - gap * gap)) > 0.6 * max(a[7], b[7]):
+                                continue
+                            if joined(a[9], b[9]):
+                                best, done = None, True
+                                break
+                            if best is None or gap < best[0]:
+                                best = (gap, j)
+                        if done:
+                            break
+                    if done:
+                        break
+                if done:
+                    break
+            if best is not None:
+                b = rec[best[1]]
+                d = pairs.setdefault((min(a[8], b[8]), max(a[8], b[8])),
+                                     {'n': {}, 'area': {}, 'gmin': 1e300, 'gmax': 0.0, 'at': (a[0], a[1], a[2]), 'e': a[10]})
+                d['n'][a[8]] = d['n'].get(a[8], 0) + 1
+                d['area'][a[8]] = d['area'].get(a[8], 0.0) + a[6]
+                d['gmin'] = min(d['gmin'], best[0])
+                d['gmax'] = max(d['gmax'], best[0])
+        if not pairs:
+            return
+        size_of = {}
+        for e in range(len(codes)):
+            if fams[codes[e]][0] in FACING_SOLID:
+                r = root(nodes[off[e]])
+                size_of[r] = size_of.get(r, 0) + 1
+        for d in pairs.values():                  # one side of the interface: the larger of the two sums
+            d['n'] = max(d['n'].values())
+            d['area'] = max(d['area'].values())
+        out = sorted([kv for kv in pairs.items() if kv[1]['n'] >= 2], key=lambda kv: -kv[1]['area'])
+
+        def ename(e):
+            i = self.e_inst[e]
+            return ('%s.%d' % (self.ctxs[i].name, self.e_label[e])) if i else str(self.e_label[e])
+        for (ra, rb), d in out[:6]:
+            g = ('间隙 %s～%s' % (_fmt(d['gmin']), _fmt(d['gmax']))) if d['gmax'] > 1e-9 * h else '重合'
+            add('warn', '两块实体网格 (%d 个单元和 %d 个单元的两块) 有 %d 个外表面正对着, %s, 面积约 %s, 却不在同一个 Tie '
+                        '或接触的两侧: 这里没有连上 (如单元 %s 附近 (%s, %s, %s))。如果本该连着, 查一下 Tie 的面是不是漏了这一段' % (
+                            size_of.get(ra, 0), size_of.get(rb, 0), d['n'], g, _fmt(d['area']), ename(d['e']),
+                            _fmt(d['at'][0]), _fmt(d['at'][1]), _fmt(d['at'][2])))
+        if len(out) > 6:
+            add('info', '另有 %d 处实体网格贴着却没连上, 未列出' % (len(out) - 6))
 
     def _check_adjacency(self, add):
         """instances whose meshes touch although nothing connects them"""
@@ -4761,7 +4942,7 @@ class Model(object):
         if len(stray):
             add('info', '有 %d 个节点没有被任何单元使用, 也不是参考点/刚体/耦合/MPC 节点 (如节点 %s)' % (
                 len(stray), ', '.join(self.node_name(g) for g in stray[:3])))
-        for fn in (self._check_ties, self._check_contact_pairs, self._check_adjacency,
+        for fn in (self._check_ties, self._check_contact_pairs, self._check_adjacency, self._check_facing_gaps,
                    self._check_static_restraint):
             try:
                 fn(add)
@@ -4780,6 +4961,10 @@ TIE_DEFAULT_TOL_N2S = 0.05  # node-to-surface formulation (Abaqus/Explicit defau
 TIE_DEFAULT_TOL_S2S = 0.10  # surface-to-surface formulation (Abaqus/Standard default)
 TIE_DEFAULT_TOL = TIE_DEFAULT_TOL_N2S   # old name, kept for callers
 TIE_NODE_CAP = 20000        # slave nodes examined per tie
+TIE_CHECK_CAP = 1000        # ties whose gaps are measured (a whole vehicle had 536)
+FACING_SOLID = ('hex', 'tet', 'wedge', 'pyr')
+FACING_GAP_FRAC = 0.25      # facing faces closer than this fraction of the smaller face size count as touching
+FACING_FACE_CAP = 400000    # solid skin faces examined at most
 CONTACT_NODE_CAP = 4000     # slave nodes examined per contact pair
 ADJ_TOL = 0.02              # "touching" = closer than this fraction of the local element size
 ADJ_BUDGET = 4000000        # node + facet visits allowed for the adjacency check

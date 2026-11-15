@@ -2,7 +2,7 @@
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { denialFor } from './index.js'
+import { denialFor, fileDenial } from './index.js'
 
 const root = mkdtempSync(join(tmpdir(), 'abqgate-'))
 const gated = join(root, 'gated'), open = join(root, 'open'), off = join(root, 'off')
@@ -30,8 +30,28 @@ const cases = [
   ['echo "see the abaqus manual"', sub, false],
   ['abaqus job=beam interactive', join(open, 'models', 'm1'), false],
   ['abaqus job=beam interactive', join(off, 'models', 'm1'), false],
+  // the gate itself is off limits to the agent
+  ['E:\\DSH-Abaqus\\abq.cmd gate off', sub, true],
+  ['E:\\DSH-Abaqus\\abq.cmd gate off; E:\\DSH-Abaqus\\abq.cmd run x', gated, true],
+  ['py E:\\DSH-Abaqus\\tools\\abq\\abq.py gate off', sub, true],
+  ['$env:ABQ_GATE="off"; E:\\DSH-Abaqus\\abq.cmd run x', sub, true],
+  ["Set-Content E:\\DSH-Abaqus\\.abq\\config.json '{}'", sub, true],
+  ['E:\\DSH-Abaqus\\abq.cmd gate status', sub, false],
+  ['E:\\DSH-Abaqus\\abq.cmd gate on', sub, false],
+  ['E:\\DSH-Abaqus\\abq.cmd gate off', join(off, 'models', 'm1'), false],
 ]
 let bad = 0
+const files = [
+  [join(gated, '.abq', 'config.json'), sub, true],
+  ['..\\..\\.abq\\review.json', sub, true],
+  [join(sub, 'model.py'), sub, false],
+  [join(off, '.abq', 'config.json'), join(off, 'models', 'm1'), false],
+]
+for (const [p, cwd, deny] of files) {
+  const got = fileDenial(p, cwd) !== undefined
+  if (got !== deny) { bad++; console.log('MISMATCH file', deny ? 'should deny' : 'should allow', '::', p) }
+}
+
 for (const [cmd, cwd, deny] of cases) {
   const got = denialFor(cmd, cwd) !== undefined
   if (got !== deny) { bad++; console.log('MISMATCH', deny ? 'should deny' : 'should allow', '::', cmd) }
