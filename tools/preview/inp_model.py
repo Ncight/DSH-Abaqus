@@ -1329,6 +1329,18 @@ class Model(object):
     def __init__(self, path, force=False, max_auto_mb=None):
         """path: the INP.  Files above the automatic size limit raise TooLargeError unless force=True;
         with force=True they still raise MemoryRefusedError when the machine lacks the memory."""
+        self._init_state(path)
+        if not os.path.isfile(path):
+            raise FileNotFoundError(path)
+        scan = prescan(path)
+        self.size_bytes = scan['bytes']
+        self.n_files = max(1, scan['files'])
+        check_memory(path, scan['bytes'], force, max_auto_mb)
+        self._inst_left = dict(scan['instances'])
+        self._parse(scan)
+
+    def _init_state(self, path):
+        """the empty model (mapdl_model.Model starts from it too and fills it from a CDB)"""
         self.path = path
         self.warnings = []
         self.incomplete = []       # reasons why the preview may not show the whole model
@@ -1391,14 +1403,6 @@ class Model(object):
         self._skin_all = None
         self.n_dead = 0
         self.type_counts = {}
-        if not os.path.isfile(path):
-            raise FileNotFoundError(path)
-        scan = prescan(path)
-        self.size_bytes = scan['bytes']
-        self.n_files = max(1, scan['files'])
-        check_memory(path, scan['bytes'], force, max_auto_mb)
-        self._inst_left = dict(scan['instances'])
-        self._parse(scan)
 
     # ------------------------------------------------------------ bookkeeping
     def _miss(self, msg):

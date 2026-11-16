@@ -1,0 +1,56 @@
+/* ANSYS look of the preview panel (ANSYS plan v2.1, 4.6): the layout and colours of ANSYS Mechanical, no logo or
+   trademark artwork.  Every rule applies only under body[data-solver="mapdl"], so the Abaqus look (the styles in
+   index.html) stays exactly as it was. */
+body[data-solver="mapdl"] { font-family: "Segoe UI", "Microsoft YaHei", Tahoma, sans-serif; background: #eef2f7; }
+
+/* ribbon */
+body[data-solver="mapdl"] #ctx { background: linear-gradient(#ffffff, #e6edf6); border-bottom: 1px solid #b2c1d4; }
+body[data-solver="mapdl"] #ctx button, body[data-solver="mapdl"] .btn { background: #f7f9fc; border: 1px solid #b6c3d4; border-radius: 2px; }
+body[data-solver="mapdl"] #ctx button:hover, body[data-solver="mapdl"] .btn:hover { background: #dcebfc; border-color: #3d86d4; }
+body[data-solver="mapdl"] #ctx button.on { background: #cfe2f8; border-color: #3d86d4; }
+body[data-solver="mapdl"] #ctx > label.wide { display: none; }      /* the CAE "module" box means nothing here */
+body[data-solver="mapdl"] #solverTag { display: inline-block; padding: 1px 8px; border-radius: 2px; color: #fff; background: #1f5f9e;
+  font-weight: 600; white-space: nowrap; }
+
+/* outline and details */
+body[data-solver="mapdl"] #left { background: #f5f8fb; border-right: 1px solid #b2c1d4; }
+body[data-solver="mapdl"] #tabs { border-bottom: 1px solid #b2c1d4; }
+body[data-solver="mapdl"] #tabs div { background: #e8eef6; border-color: #b2c1d4; }
+body[data-solver="mapdl"] #tabs div.on { background: #ffffff; }
+body[data-solver="mapdl"] #tree summary { padding: 1px 2px; }
+body[data-solver="mapdl"] #tree .leaf:hover { background: #e8f1fc; }
+body[data-solver="mapdl"] #tree .leaf.sel { background: #cfe2f8; color: #000; }
+body[data-solver="mapdl"] #tree .leaf.sel .dim { color: #445; }
+body[data-solver="mapdl"] #tree .ico { display: inline-block; width: 10px; height: 10px; margin-right: 5px; vertical-align: -1px;
+  border: 1px solid rgba(0,0,0,.35); border-radius: 2px; }
+body[data-solver="mapdl"] #tree .tl { display: inline-block; min-width: 13px; padding: 0 2px; margin-right: 4px; color: #fff; font-weight: bold;
+  text-align: center; border-radius: 2px; font-size: 11px; line-height: 14px; }
+body[data-solver="mapdl"] #propHead { background: #e8eef6; color: #1d3a5e; border-color: #b2c1d4; }
+body[data-solver="mapdl"] #prop td:first-child { background: #f3f6fa; }
+
+/* graphics window */
+body[data-solver="mapdl"] #vpWrap { border: 1px solid #9aabbf; }
+body[data-solver="mapdl"] #vpTitle { background: #ffffff; color: #1d3a5e; text-align: left; padding: 3px 8px; font-weight: 600;
+  border-bottom: 1px solid #c6d2e0; }
+body[data-solver="mapdl"] #rvBar { background: #f1f5fa; border-bottom: 1px solid #c6d2e0; }
+body[data-solver="mapdl"] #rvPanel { border-bottom-color: #1f5f9e; }
+body[data-solver="mapdl"] #vp { background: linear-gradient(180deg, #9db7d8 0%, #dfe8f3 62%, #ffffff 100%); }
+body[data-solver="mapdl"] #symLegend { display: none; }
+body[data-solver="mapdl"] #legend { top: auto; bottom: 108px; color: #1d2a3a; text-shadow: none; max-height: 30%; }
+body[data-solver="mapdl"] #tagLegend { display: block; position: absolute; left: 10px; top: 10px; z-index: 5; max-width: 52%; max-height: 58%;
+  overflow: hidden; padding: 5px 8px; background: rgba(255,255,255,.93); border: 1px solid #9aabbf; color: #1d2a3a;
+  line-height: 18px; box-shadow: 0 1px 4px rgba(0,0,0,.18); }
+body[data-solver="mapdl"] #tagLegend:empty { display: none; }
+body[data-solver="mapdl"] #tagLegend .hd { font-weight: 600; color: #1d3a5e; }
+body[data-solver="mapdl"] #tagLegend .sub { color: #555; }
+body[data-solver="mapdl"] #tagLegend .row { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body[data-solver="mapdl"] #tagLegend .tl { display: inline-block; min-width: 14px; padding: 0 2px; margin-right: 5px; color: #fff; font-weight: bold;
+  text-align: center; border-radius: 2px; }
+body[data-solver="mapdl"] #tagLegend .tv { color: #555; }
+body[data-solver="mapdl"] #tags { display: block; position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 4; }
+body[data-solver="mapdl"] #tags .tag { position: absolute; transform: translate(-50%, calc(-100% - 7px)); padding: 0 4px; color: #fff;
+  font-weight: bold; font-size: 11px; line-height: 15px; border: 1px solid rgba(0,0,0,.45); border-radius: 2px; white-space: nowrap; }
+body[data-solver="mapdl"] #tags .tag::after { content: ''; position: absolute; left: 50%; bottom: -7px; margin-left: -1px; width: 2px; height: 6px;
+  background: rgba(0,0,0,.55); }
+body[data-solver="mapdl"] #alerts div { border-radius: 2px; }
+body[data-solver="mapdl"] #msg { border-top: 1px solid #b2c1d4; }

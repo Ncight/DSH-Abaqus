@@ -1,0 +1,14 @@
+! static, three load steps: 100 N, 200 N at the tip, then the same again (TIME left out)
+/SOLU
+ANTYPE,STATIC
+NLGEOM,OFF
+OUTRES,ALL,ALL
+TIME,1
+NSUBST,1
+F,NTIP,FZ,-4          ! per node: 25 tip nodes x -4 N = -100 N
+SOLVE
+TIME,2
+F,NTIP,FZ,-8
+SOLVE
+SOLVE
+FINISH

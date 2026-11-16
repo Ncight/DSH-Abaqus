@@ -20,6 +20,11 @@
 *.msg
 *.sta
 *.dat
+# ...but the solve segments of the ANSYS test models are data
+!tools/preview/tests/data/*.solve.dat
+!tools/ans/tests/data/*.solve.dat
+# run directories of the ANSYS toolbox (ans build / ans run)
+.ans/
 *.log
 *.abqlog
 *.rpy
@@ -43,6 +48,14 @@ tools/abq/data/samples_index.json.gz
 examples/corpus/official/
 examples/corpus/_gen/odb_truth_official.json
 tools/preview/tests/shots/official_*.png
+# more workspaces of the preview panel on this machine (start_preview.cmd)
+tools/preview/extra_roots.local.txt
 # scratch folder of the desktop walkthrough
 examples/desktop_gate_test/
 refs/
+# written by tools/ans/tests/test_roundtrip.py and test_rst_extras.py on each run
+tools/ans/tests/roundtrip_result.json
+tools/ans/tests/rst_extras_result.json
+tools/ans/tests/rst_lin_result.json
+# written by tools/ans/skill_checks/run_all.py on each run
+tools/ans/skill_checks/last_run.json

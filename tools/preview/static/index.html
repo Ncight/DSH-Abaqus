@@ -115,15 +115,19 @@
   body.narrow #more .sep { display: none; }
   body.narrow #ctx .wide { display: none; }
   body.narrow #triad { width: 72px; height: 72px; }
+  /* elements of the ANSYS look (static/skin-ansys.css); never shown with the Abaqus look */
+  #solverTag, #tags, #tagLegend { display: none; }
 </style>
+<link rel="stylesheet" href="/static/skin-ansys.css">
 <script type="importmap">{ "imports": { "three": "/static/three.module.js" } }</script>
 </head>
 <body>
 <div id="ctx">
   <button id="treeBtn" title="显示 / 隐藏模型树">☰ 模型树</button>
+  <span id="solverTag"></span>
   <label class="wide">模块: <select disabled><option>预览 (只读)</option></select></label>
   <label><span class="wide">模型: </span><select id="fileSel"></select></label>
-  <label><span class="wide">分析步: </span><select id="stepSel"></select></label>
+  <label><span class="wide" id="stepLbl">分析步: </span><select id="stepSel"></select></label>
   <span id="views">
     <button data-v="front" title="前视">前</button><button data-v="back" title="后视">后</button>
     <button data-v="top" title="俯视">顶</button><button data-v="bottom" title="仰视">底</button>
@@ -140,7 +144,7 @@
     <label><input type="checkbox" id="symChk" checked>边界/载荷符号</label>
     <label><input type="checkbox" id="intChk">内部集</label>
     <label><input type="checkbox" id="followChk" checked>跟随最新文件</label>
-    <label>竖直轴: <select id="upSel"><option value="y">Y</option><option value="z">Z</option></select></label>
+    <label>竖直轴: <select id="upSel"><option value="z" selected>Z</option><option value="y">Y</option></select></label>
   </span>
 </div>
 <div id="main">
@@ -170,6 +174,8 @@
         <div id="rvPrev"></div>
       </div>
       <div id="legend"></div>
+      <div id="tags"></div>
+      <div id="tagLegend"></div>
       <div id="alerts"><div id="alert"></div><div id="partial"></div></div>
       <div id="symLegend"></div>
       <canvas id="triad"></canvas>
@@ -184,15 +190,36 @@
 
 <script type="module">
 import * as THREE from 'three';
-import { OrbitControls } from '/static/OrbitControls.js';
+import { ViewControls } from '/static/ViewControls.js';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const enc = encodeURIComponent;
-const DOF = ['', 'U1', 'U2', 'U3', 'UR1', 'UR2', 'UR3', 'WARP', 'POR', '', '', 'NT11'];
+// A file is known by its key: its path while the panel watches one workspace, "<workspace number>|<path>" while it
+// watches several (the server then lists `root` with every file and wants it back with every request).
+let rootNames = [];
+const keyOf = f => f.root === undefined ? f.path : f.root + '|' + f.path;
+function splitKey(k) { const i = k.indexOf('|'); return i < 0 ? { path: k } : { root: +k.slice(0, i), path: k.slice(i + 1) }; }
+function fileQuery(k) { const s = splitKey(k); return 'path=' + enc(s.path) + (s.root === undefined ? '' : '&root=' + s.root); }
+function labelOf(k) { const s = splitKey(k); return s.root === undefined ? s.path : `[${rootNames[s.root] || s.root}] ${s.path}`; }
+function storeName(k) { if (k === null) return k; const s = splitKey(k); return s.root === undefined ? s.path : (rootNames[s.root] || s.root) + '|' + s.path; }
+const DOF =['', 'U1', 'U2', 'U3', 'UR1', 'UR2', 'UR3', 'WARP', 'POR', '', '', 'NT11'];
 const PALETTE = ['#3cb5a0', '#e6853c', '#5b8fd6', '#d6c84a', '#b56bd0', '#6cc04a', '#d65b7a', '#47c4d6',
                  '#a08060', '#8f9bd6', '#d69a5b', '#5bd6a0'];
 const DEFAULT_COLOR = '#3cb5a0', UNASSIGNED = '#8c8c8c', RIGID = '#c9ccd4', HILITE = 0xff0000;
+// Two looks (ANSYS plan 4.6): the model file decides.  'abaqus' holds exactly the colours used before; the ANSYS
+// look is index.html + static/skin-ansys.css (rules only under body[data-solver="mapdl"]) + the values below.
+const SKIN = {
+  abaqus: { title: 'Abaqus 前处理预览', body: DEFAULT_COLOR, sym: { tr: 0xff8000, ro: 0x0000ff, cload: 0xffff00, press: 0xff00ff, grav: 0x00e0ff } },
+  mapdl: { title: 'ANSYS 前处理预览', body: '#9cc5a1', sym: { tr: 0x3c50c8, ro: 0x7a3cc8, cload: 0xd01010, press: 0xe04848, grav: 0xc89a00 } },
+};
+const TAG_COLOR = { fixed: '#3c50c8', support: '#3c78d8', disp: '#d08a00', force: '#d01010', moment: '#9c27b0', pressure: '#e04848',
+  surface: '#c06030', temp: '#ff8c00', body: '#b07020', accel: '#c89a00', dead: '#808080' };
+const ANALYSIS_NAME = { Static: '静力结构 (Static Structural)', Modal: '模态 (Modal)', Harmonic: '谐响应 (Harmonic Response)',
+  Transient: '瞬态结构 (Transient Structural)', Buckle: '特征值屈曲 (Eigenvalue Buckling)', Spectrum: '响应谱 (Response Spectrum)' };
+let curSolver = 'abaqus';         // solver of the file on show (also when it was too large to parse)
+const skinOf = () => curSolver === 'mapdl' ? 'mapdl' : 'abaqus';
+let tagList = [];                 // ANSYS look: letter tags of the loads, [{el, p}] (placed by placeTags after each render)
 
 // numbers: never scientific notation; 4 decimals, or 4 significant digits for tiny values
 function fmt(v) {
@@ -262,13 +289,29 @@ const halfRes = new THREE.Vector2(1, 1);            // half the viewport size in
 function makeControls() {
   const tgt = controls ? controls.target.clone() : center.clone();
   if (controls) controls.dispose();
-  controls = new OrbitControls(camera, renderer.domElement);
+  controls = new ViewControls(camera, renderer.domElement);     // free rotation about every axis (ViewControls.js)
   controls.target.copy(tgt);
-  controls.rotateSpeed = 0.9;
+  controls.rotateSpeed = 2.5;
   controls.addEventListener('change', () => { dirty = true; });
   controls.update();
 }
-function upVec() { return $('upSel').value === 'z' ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0); }
+// vertical axis of the standard views: Z by default (user, 2026-11-15).  The menu can switch a 3-D model to Y; the
+// choice belongs to that file and is kept in this browser (localStorage), so a model built Y-up stays Y-up when it
+// comes back while the others keep Z.  Plane and axisymmetric models lie in the X-Y plane and always keep Y up.
+const UP_STORE = 'abqPreview.upAxis', UP_KEEP = 300;
+let upChoice = {};
+try { upChoice = JSON.parse(localStorage.getItem(UP_STORE) || '{}') || {}; } catch (e) { upChoice = {}; }
+function flatModel() { return !!(M && M.stats && (M.stats.dim === '2d' || M.stats.dim === 'axi')); }
+function upAxis() { return flatModel() ? 'y' : upChoice[curKey] === 'y' ? 'y' : 'z'; }
+function setUpChoice(v) {
+  if (curKey === null || flatModel()) return;
+  delete upChoice[curKey];
+  if (v === 'y') upChoice[curKey] = 'y';
+  const keys = Object.keys(upChoice);
+  keys.slice(0, Math.max(0, keys.length - UP_KEEP)).forEach(k => delete upChoice[k]);
+  try { localStorage.setItem(UP_STORE, JSON.stringify(upChoice)); } catch (e) { /* storage blocked: this page still remembers */ }
+}
+function upVec() { return upAxis() === 'z' ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0); }
 // Distance from the model centre (looking back along dir) at which the model box just fills the view:
 // each corner of the box needs its own distance, the largest one wins.  Some room is left for the symbols.
 function fitDistance(dir) {
@@ -289,14 +332,18 @@ function fitDistance(dir) {
   return isFinite(d) && d > diag * 1e-6 ? Math.min(d * 1.15, sphere * 1.08) : sphere * 1.08;
 }
 function setView(name) {
-  const zUp = $('upSel').value === 'z';
+  const zUp = upAxis() === 'z';
+  $('upSel').value = zUp ? 'z' : 'y';
+  $('upSel').disabled = flatModel();
+  $('upSel').title = flatModel() ? '平面和轴对称模型在 X-Y 平面里，固定 Y 朝上' : '这个文件的竖直轴（默认 Z，改了会记住）';
   const D = zUp
     ? { front: [0, -1, 0], back: [0, 1, 0], top: [0, 0, 1], bottom: [0, 0, -1], left: [-1, 0, 0], right: [1, 0, 0], iso: [1, -1, 0.8] }
     : { front: [0, 0, 1], back: [0, 0, -1], top: [0, 1, 0], bottom: [0, -1, 0], left: [-1, 0, 0], right: [1, 0, 0], iso: [1, 0.8, 1] };
   let dir;
   if (name === 'fit') dir = camera.position.clone().sub(controls.target).normalize();
   else dir = new THREE.Vector3(...D[name]).normalize();
-  camera.up.copy(upVec());
+  // 适应 (fit) keeps the orientation the user has turned the model to; the standard views put the vertical axis up
+  if (name !== 'fit') camera.up.copy(upVec());
   if (name === 'top' || name === 'bottom') camera.up.copy(zUp ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(0, 0, -1));
   const dist = fitDistance(dir);
   camera.position.copy(center).addScaledVector(dir, dist);
@@ -343,6 +390,7 @@ function animate() {
   if (!dirty) return;
   dirty = false;
   renderer.render(scene, camera);
+  if (tagList.length) placeTags();
   if (controls) {
     triC.position.copy(camera.position).sub(controls.target).normalize().multiplyScalar(5);
     triC.up.copy(camera.up); triC.lookAt(0, 0, 0);
@@ -418,11 +466,11 @@ function crossTexture() {
 }
 
 // ---------------------------------------------------------------- model
-let M = null, curPath = null, faceMesh = null, edgeLines = null, beamLines = null, selLeaf = null;
+let M = null, curKey = null, faceMesh = null, edgeLines = null, beamLines = null, selLeaf = null;
 
 function colorOf(mode, i) {
   if (i === -2) return RIGID;
-  if (mode === 'none') return DEFAULT_COLOR;
+  if (mode === 'none') return SKIN[skinOf()].body;
   return i < 0 ? UNASSIGNED : PALETTE[i % PALETTE.length];
 }
 function applyColors() {
@@ -537,7 +585,7 @@ async function highlight(items) {
   clearGroup(gHi);
   for (const [kind, name, color] of items) {
     try {
-      const h = await api(`/api/highlight?path=${enc(curPath)}&kind=${kind}&name=${enc(name)}`);
+      const h = await api(`/api/highlight?${fileQuery(curKey)}&kind=${kind}&name=${enc(name)}`);
       if (seq !== hiSeq) return;
       addHighlight(h, color || HILITE);
     } catch (e) { log('高亮失败: ' + e.message, true); }
@@ -569,11 +617,13 @@ function shafts(list, color, s, len) {
 async function loadSymbols() {
   clearGroup(gSym);
   $('symLegend').innerHTML = '';
+  clearTags();
   if (!M || !$('symChk').checked) return;
   let sy;
-  try { sy = await api(`/api/symbols?path=${enc(curPath)}&step=${$('stepSel').value}`); }
+  try { sy = await api(`/api/symbols?${fileQuery(curKey)}&step=${$('stepSel').value}`); }
   catch (e) { log('符号载入失败: ' + e.message, true); return; }
   if (sy.tooLarge) return;
+  const C = SKIN[skinOf()].sym;
   const s = diag * 0.03, tr = [], ro = [];
   const AX = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
   for (const b of sy.bc) for (let i = 0; i < b.pts.length; i += 3) for (const d of b.dofs) {
@@ -581,16 +631,17 @@ async function loadSymbols() {
     else if (d >= 4 && d <= 6) { const a = AX[d - 4]; ro.push(b.pts[i] - a[0] * s * 0.75, b.pts[i + 1] - a[1] * s * 0.75, b.pts[i + 2] - a[2] * s * 0.75, ...a); }
   }
   const cmom = sy.cmom || [], grav = sy.grav || [];
-  cones(tr, 0xff8000, s); cones(ro, 0x0000ff, s);
-  cones(sy.cload, 0xffff00, s * 1.4); shafts(sy.cload, 0xffff00, s * 1.4, 3);
-  cones(cmom, 0xffff00, s * 1.4); cones(cmom, 0xffff00, s * 1.4, 0.55); shafts(cmom, 0xffff00, s * 1.4, 3);   // moment: double head
-  cones(sy.press, 0xff00ff, s); shafts(sy.press, 0xff00ff, s, 2.4);
+  cones(tr, C.tr, s); cones(ro, C.ro, s);
+  cones(sy.cload, C.cload, s * 1.4); shafts(sy.cload, C.cload, s * 1.4, 3);
+  cones(cmom, C.cload, s * 1.4); cones(cmom, C.cload, s * 1.4, 0.55); shafts(cmom, C.cload, s * 1.4, 3);   // moment: double head
+  cones(sy.press, C.press, s); shafts(sy.press, C.press, s, 2.4);
   const b = M.stats.viewBbox || M.stats.bbox;
   grav.slice(0, 4).forEach((g, i) => {                 // gravity / body force: one arrow beside the model
     const d = new THREE.Vector3(...g.dir).normalize(), len = diag * 0.16;
     const o = new THREE.Vector3(b[0][0] - diag * 0.06 * (i + 1), (b[0][1] + b[1][1]) / 2, (b[0][2] + b[1][2]) / 2).addScaledVector(d, -len / 2);
-    gSym.add(new THREE.ArrowHelper(d, o, len, 0x00e0ff, len * 0.28, len * 0.13));
+    gSym.add(new THREE.ArrowHelper(d, o, len, C.grav, len * 0.28, len * 0.13));
   });
+  if (skinOf() === 'mapdl') drawTags(sy.tags || []);
   const L = [];
   if (tr.length) L.push('<span style="color:#ff8000">▲</span> 平动约束');
   if (ro.length) L.push('<span style="color:#4060ff">▲</span> 转动约束');
@@ -600,6 +651,185 @@ async function loadSymbols() {
   for (const g of grav.slice(0, 4)) L.push(`<span style="color:#00e0ff">→</span> ${g.kind === 'GRAV' ? '重力' : '体力 ' + esc(g.kind)} ${fmt(g.mag)}`);
   $('symLegend').innerHTML = L.join('<br>');
   dirty = true;
+}
+
+// ---------------------------------------------------------------- ANSYS look: letter tags, legend box, wording
+function clearTags() { tagList = []; $('tags').innerHTML = ''; $('tagLegend').innerHTML = ''; }
+function stepInfo() {
+  const st = M && M.steps[+$('stepSel').value];
+  const proc = st ? st.proc : (M && M.steps[0] ? M.steps[0].proc : '');
+  return { st, analysis: ANALYSIS_NAME[proc] || proc || '—' };
+}
+function drawTags(tags) {
+  const { st, analysis } = stepInfo();
+  const name = st ? (st.name === 'CDB' ? 'CDB 载荷状态' : st.name) : '初始状态';
+  const time = st && st.params && st.params.TIME ? ' · 时间 ' + st.params.TIME : '';
+  $('tagLegend').innerHTML = `<div class="hd">${esc(analysis)}</div><div class="sub">${esc(name + time)}</div>` +
+    tags.map(t => `<div class="row"><span class="tl" style="background:${TAG_COLOR[t.kind] || '#666'}">${esc(t.letter)}</span>${esc(t.name)}` +
+      `${t.target ? ': ' + esc(t.target) : ''}${t.value ? ` <span class="tv">${esc(t.value)}</span>` : ''}</div>`).join('');
+  for (const t of tags) {
+    if (!t.pos) continue;
+    const el = document.createElement('div');
+    el.className = 'tag'; el.textContent = t.letter; el.title = t.name + (t.target ? ': ' + t.target : '');
+    el.style.background = TAG_COLOR[t.kind] || '#666';
+    $('tags').appendChild(el);
+    tagList.push({ el, p: new THREE.Vector3(t.pos[0], t.pos[1], t.pos[2]) });
+  }
+  placeTags();
+}
+function placeTags() {
+  const w = vp.clientWidth, h = vp.clientHeight, v = new THREE.Vector3();
+  for (const t of tagList) {
+    v.copy(t.p).project(camera);
+    const vis = v.z > -1 && v.z < 1 && Math.abs(v.x) <= 1.05 && Math.abs(v.y) <= 1.05;
+    t.el.style.display = vis ? '' : 'none';
+    t.el.style.left = ((v.x + 1) / 2 * w).toFixed(1) + 'px';
+    t.el.style.top = ((1 - v.y) / 2 * h).toFixed(1) + 'px';
+  }
+}
+const ORIG = {};                  // texts of the Abaqus look, put back when an Abaqus file is shown again
+function applySkin() {
+  const s = skinOf(), A = s === 'mapdl', stepLbl = $('stepLbl');
+  if (!ORIG.saved) { ORIG.saved = true; ORIG.tree = $('treeBtn').textContent; ORIG.tab = $('tabTree').textContent; ORIG.step = stepLbl.textContent; }
+  if (document.body.dataset.solver !== s) document.body.dataset.solver = s;
+  document.title = SKIN[s].title;
+  $('treeBtn').textContent = A ? '☰ 大纲' : ORIG.tree;
+  $('tabTree').textContent = A ? '大纲' : ORIG.tab;
+  stepLbl.textContent = A ? '载荷步: ' : ORIG.step;
+  // which program and which workspace: shown with the ANSYS look, and whenever several workspaces are watched
+  const ws = curKey && splitKey(curKey).root !== undefined ? ' · ' + (rootNames[splitKey(curKey).root] || '') : '';
+  $('solverTag').textContent = (A ? 'ANSYS (MAPDL)' : 'Abaqus') + ws;
+  $('solverTag').style.display = A || rootNames.length > 1 ? 'inline-block' : '';
+}
+const ANS_LOAD = { F: '力', FDELE: '删除力', SF: '压力', SFE: '压力', SFDELE: '删除面载荷', BF: '温度', BFE: '温度', BFDELE: '删除体载荷',
+  ACEL: '加速度', OMEGA: '旋转速度', CMOMEGA: '部件旋转速度', EKILL: '杀死单元', EALIVE: '激活单元', SLOAD: '螺栓预紧', TUNIF: '均匀温度',
+  SFBEAM: '梁上分布载荷' };
+const ANS_KIND = { F: 'force', SF: 'pressure', SFE: 'pressure', BF: 'temp', BFE: 'temp', ACEL: 'accel', EKILL: 'dead', EALIVE: 'dead',
+  SLOAD: 'force', TUNIF: 'temp' };
+function ansLoadName(l) {
+  if ((l.kw === 'SF' || l.kw === 'SFE') && l.label && l.label !== 'PRES') return '面载荷 ' + l.label;
+  if ((l.kw === 'BF' || l.kw === 'BFE') && l.label && l.label !== 'TEMP') return '体载荷 ' + l.label;
+  return ANS_LOAD[l.kw] || l.kw;
+}
+function ansBcName(b) {
+  if (b.command === 'DDELE') return '删除约束';
+  if (b.mag && b.mag.length) return '位移';
+  return b.kind === 'fixed' ? '固定支撑' : '约束';
+}
+function buildTreeAnsys() {
+  const showInt = $('intChk').checked;
+  const out = [], leaves = [];
+  const leaf = (cat, text, dim, rows, hi, ico) => { leaves.push({ rows, hi, text, cat });
+    return `<div class="leaf" data-i="${leaves.length - 1}">${ico ? `<i class="ico" style="background:${ico}"></i>` : ''}${esc(text)}${dim ? ` <span class="dim">${esc(dim)}</span>` : ''}</div>`; };
+  const node = (title, items, open, ico) => `<details${open ? ' open' : ''}><summary>${ico ? `<i class="ico" style="background:${ico}"></i>` : ''}${esc(title)} <span class="cnt">(${items.length})</span></summary>${items.slice(0, 2000).join('') || '<div class="empty">无</div>'}${items.length > 2000 ? `<div class="empty">… 只列出前 2000 项</div>` : ''}</details>`;
+  const st = M.stats, cdb = M.cdb || {}, seg = M.solve || {};
+  const model = [];
+  // bodies: one per element type / material / real constant / section combination; contact, target and surface
+  // elements are not bodies (they are listed under Connections)
+  const bodies = M.sections.map((s, i) => [s, i]).filter(([s]) => s.cls !== 'CS' && s.cls !== 'CL');
+  model.push(node('几何', bodies.map(([s, i]) => leaf('体', s.type + ' · ' + (s.material || '无材料'), s.count + ' 单元',
+    [['单元类型', s.type], ['材料', s.material || '—'], ['单元数', s.count], ['类型号 / 材料号 / 实常数号 / 截面号', [s.etype, s.mat, s.real, s.secnum].join(' / ')],
+     ...s.data.map((d, k) => ['数据 ' + (k + 1), d])], [['section', String(i)]], '#6aa84f')), true, '#6aa84f'));
+  model.push(node('材料', M.materials.map(m => {
+    const rows = [['材料', m.name]];
+    for (const o of m.options) {
+      o.rows.forEach((r, i) => rows.push([i ? '' : o.kw + (paramTxt(o.params) ? ' ' + paramTxt(o.params) : ''), rowTxt(r)]));
+      if (o.nrows > o.rows.length) rows.push(['', '… 共 ' + o.nrows + ' 行']);
+    }
+    if (m.c !== undefined) rows.push(['√(E/ρ)', fmt(m.c) + '  ' + (m.cNote || '')]);
+    // tree label: big SI values (EX = 200000000000) without the 4 decimals, grouped by thousands; exact value in rows
+    const big = v => Math.abs(v) >= 1e5 ? Math.round(v).toLocaleString('en-US') : fmt(v);
+    return leaf('材料', m.name, m.E !== undefined ? 'EX=' + big(m.E) : '', rows, [['material', m.name]], '#e69138');
+  }), true, '#e69138'));
+  model.push(node('坐标系', [leaf('坐标系', '全局坐标系', '0', [['坐标系', '全局直角坐标系 (0)']], null, '#3d85c6'),
+    ...(cdb.csys || []).map(c => leaf('坐标系', '局部坐标系 ' + c.id, ['直角', '柱', '球', '环'][c.type] || ('类型 ' + c.type),
+      [['编号', c.id], ['类型', ['直角', '柱', '球', '环'][c.type] || c.type], ['原点', c.loc.map(fmt).join(', ')], ['转角 (°)', c.ang.map(fmt).join(', ')]], null, '#3d85c6'))],
+    false, '#3d85c6'));
+  const con = [];
+  for (const c of M.contactPairs) {
+    const d = (cdb.contacts || []).find(x => x.real === c.real) || {};
+    con.push(leaf('接触', '接触 REAL ' + c.real + (d.bonded ? ' (绑定)' : ''), d.mu ? 'μ=' + d.mu : (d.behavior || ''),
+      [['类型', d.bonded ? '绑定 (Bonded)' : '接触'], ['行为', d.behavior || '—'], ['实常数号', c.real], ['接触单元 (红)', (d.nContact || '—') + ' 个'],
+       ['目标单元 (紫)', (d.nTarget || '—') + ' 个'], ['摩擦系数', d.mu === null || d.mu === undefined ? '—' : d.mu], ...(d.keyopt2 !== undefined ? [['算法 KEYOPT(2)', d.keyopt2]] : [])],
+      [['surface', c.slave, 0xff0000], ['surface', c.master, 0xb000ff]], '#a64d79'));
+  }
+  for (const c of M.constraints) {
+    const rows = [['类型', c.kw === 'CE' ? '约束方程 (CE)' : c.kw === 'CP' ? '耦合 (CP)' : c.kw]];
+    (c.rows || []).forEach((r, i) => rows.push(['数据 ' + (i + 1), rowTxt(r)]));
+    if (c.nrows > (c.rows || []).length) rows.push(['…', '共 ' + c.nrows + ' 行']);
+    con.push(leaf('连接', c.name || c.kw, c.n ? c.n + ' 节点' : '', rows, c.id ? [['constraint', c.id]] : null, '#a64d79'));
+  }
+  model.push(node('连接', con, true, '#a64d79'));
+  const mesh = [];
+  for (const t of cdb.etypes || []) {
+    const ko = Object.entries(t.keyopt || {}).map(([k, v]) => `KEYOPT(${k})=${v}`).join(', ');
+    mesh.push(leaf('单元类型', 'ET ' + t.type + ': ' + t.name, (st.types[t.name] || 0) + ' 单元',
+      [['类型号', t.type], ['单元', t.name + ' (' + t.ename + ')'], ['单元数', st.types[t.name] || 0], ['KEYOPT', ko || '全部为 0']], null, '#76a5af'));
+  }
+  for (const [k, v] of Object.entries(cdb.reals || {})) mesh.push(leaf('实常数', '实常数 R ' + k, '', [['编号', k], ['数值', v.map(fmt).join(', ')]], null, '#76a5af'));
+  for (const s of cdb.sections || []) mesh.push(leaf('截面', '截面 ' + s.id + ': ' + s.type + (s.subtype ? ' ' + s.subtype : ''), '',
+    [['编号', s.id], ['类型', s.type + (s.subtype ? ' ' + s.subtype : '')], ...(s.data.length ? [['尺寸', s.data.map(fmt).join(', ')]] : []),
+     ...s.layers.map((l, i) => ['铺层 ' + (i + 1), l.map(fmt).join(', ')])], null, '#76a5af'));
+  out.push(`<details open><summary><i class="ico" style="background:#1f5f9e"></i>模型 <span class="cnt">${st.nodes} 节点, ${st.elements} 单元</span></summary>${model.join('')}` +
+    node('网格', mesh, false, '#76a5af') +
+    node('命名选择', [...M.nsets, ...M.elsets].filter(s => showInt || !(s.internal || s.name.startsWith('_'))).map(s => {
+      const isN = M.nsets.includes(s);
+      return leaf('命名选择', s.name, s.n + (isN ? ' 节点' : ' 单元'), [['组件', s.name], ['类型', isN ? '节点组件' : '单元组件'], [isN ? '节点数' : '单元数', s.n]],
+        [[isN ? 'nset' : 'elset', s.name]], '#f1c232');
+    }), true, '#f1c232') + '</details>');
+  // the analysis: settings of each load step, then what each step applies or changes
+  const proc = M.steps.length ? M.steps[M.steps.length - 1].proc : '';
+  const ana = [];
+  ana.push(node('分析设置', M.steps.map(s => {
+    const rows = [['载荷步', s.name === 'CDB' ? 'CDB 载荷状态' : s.name], ['分析类型', ANALYSIS_NAME[s.proc] || s.proc]];
+    if (s.params && s.params.TIME) rows.push(['结束时间', s.params.TIME]);
+    for (const [k, v] of Object.entries(s.procParams || {})) rows.push([k, v]);
+    s.procData.forEach(r => rows.push([r[0], r.slice(1).join(', ')]));
+    for (const o of s.outputs) rows.push([o.kw, o.vars.join(', ')]);
+    if (s.lines) rows.push(['求解段行号', s.lines.join(' – ')]);
+    return leaf('分析设置', s.name === 'CDB' ? 'CDB 载荷状态' : s.name, ANALYSIS_NAME[s.proc] ? s.proc : s.proc, rows, null, '#888');
+  }), true, '#888'));
+  for (const s of M.steps) {
+    const items = [];
+    for (const b of s.bcs) {
+      const rows = [['对象', b.target], ['命令', b.command || 'D'], ['自由度', (b.labels || b.dofs).join(', ')], ['节点数', b.n]];
+      for (const [a, , m] of b.mag) rows.push(['给定值 ' + (b.labels ? b.labels[0] : a), fmt(m)]);
+      if (b.line) rows.push(['求解段行号', b.line]);
+      if (b.rotatedNodes) rows.push(['节点坐标系转过的节点', b.rotatedNodes]);
+      items.push(leaf('约束', ansBcName(b) + ': ' + b.target, (b.labels || []).join(','), rows, [['bc', b.id]], b.command === 'DDELE' ? '#999' : '#3c50c8'));
+    }
+    for (const l of s.loads) {
+      const rows = [['对象', l.target || (l.rows[0] && l.rows[0][0]) || '—'], ['命令', l.command || l.kw]];
+      l.rows.slice(0, 6).forEach((r, i) => rows.push(['数据 ' + (i + 1), rowTxt(r)]));
+      if (l.n !== undefined) rows.push([l.kw === 'EKILL' || l.kw === 'EALIVE' || l.kw === 'SLOAD' ? '单元数' : l.faces !== undefined ? '节点数 / 单元面数' : '节点数',
+        l.faces !== undefined ? l.n + ' / ' + l.faces : l.n]);
+      if (l.total !== undefined && l.perNode !== undefined) rows.push(['合力', fmt(l.perNode) + ' 每节点 × ' + l.n + ' = ' + fmt(l.total)]);
+      if (l.table) rows.push(['表格', '随时间变化 (表 ' + l.table + ')']);
+      if (l.line) rows.push(['求解段行号', l.line]);
+      const txt = l.rows[0] ? rowTxt(l.rows[0].slice(1)) : '';
+      items.push(leaf('载荷', ansLoadName(l) + ': ' + (l.target || (l.rows[0] && l.rows[0][0]) || ''), txt, rows, [['load', l.id]],
+        TAG_COLOR[ANS_KIND[l.kw]] || '#999'));
+    }
+    ana.push(node(s.name === 'CDB' ? 'CDB 载荷状态' : s.name, items, s.name === 'CDB' || items.length <= 6, '#c00000'));
+  }
+  const segRows = [['文件', seg.file || '—'], ['状态', seg.present ? `${seg.steps} 个载荷步, ${seg.commands} 条命令` : '还没有'],
+    ['违规', seg.violations && seg.violations.length ? seg.violations.length + ' 处 (见体检)' : '无']];
+  (seg.whitelist || '').split('\n').filter(Boolean).forEach(l => { const i = l.indexOf(':'); segRows.push(['白名单 ' + l.slice(0, i), l.slice(i + 1).trim()]); });
+  ana.push(node('求解段', [leaf('求解段', seg.file || '求解段', seg.present ? seg.steps + ' 个载荷步' : '还没有', segRows, null, seg.violations && seg.violations.length ? '#c00000' : '#2e8b2e')],
+    false, '#2e8b2e'));
+  out.push(`<details open><summary><i class="ico" style="background:#c00000"></i>${esc(ANALYSIS_NAME[proc] || proc || '分析')}</summary>${ana.join('')}</details>`);
+  if (M.initialConditions.length) out.push(node('初始条件 (IC)', M.initialConditions.map(c => leaf('初始条件', c.type, c.n + ' 个节点',
+    [['类型', c.type], ['节点数', c.n], ...c.rows.map((r, i) => ['数据 ' + (i + 1), rowTxt(r)])], null, '#888')), false, '#888'));
+  if (M.parameters) out.push(node('参数 (*SET)', Object.entries(M.parameters).map(([k, v]) => leaf('参数', k, '= ' + fmtTok(String(v)), [['参数', k], ['取值', fmtTok(String(v))]], null)), false));
+  $('tree').innerHTML = out.join('');
+  selLeaf = null;
+  $('tree').querySelectorAll('.leaf').forEach(el => el.addEventListener('click', () => {
+    if (selLeaf) selLeaf.classList.remove('sel');
+    selLeaf = el; el.classList.add('sel');
+    const it = leaves[+el.dataset.i];
+    showProp(it.text, it.rows, it.cat + ' ' + it.text);
+    if (it.hi) highlight(it.hi); else { hiSeq++; clearGroup(gHi); }
+  }));
 }
 
 // ---------------------------------------------------------------- tree + properties
@@ -639,6 +869,7 @@ function loadRows(l) {
 const CON_NAME = { 'Coupling': '耦合', 'Rigid Body': '刚体', 'Mpc': 'MPC', 'Equation': '方程约束', 'Embedded Element': '嵌入',
   'Display Body': '显示体', 'Pre-Tension Section': '预紧截面', 'Kinematic Coupling': '运动耦合', 'Shell To Solid Coupling': '壳-实体耦合' };
 function buildTree() {
+  if (M.solver === 'mapdl') { buildTreeAnsys(); return; }
   const showInt = $('intChk').checked, vis = s => showInt || !(s.internal || s.name.split('.').pop().startsWith('_'));
   const out = [];
   const leaves = [];
@@ -738,6 +969,19 @@ function buildTree() {
 }
 function showOverview() {
   const st = M.stats, b = st.bbox;
+  if (M.solver === 'mapdl') {
+    const lr = st.loadResultant, seg = M.solve || {};
+    showProp(M.file, [['文件', M.path], ['MAPDL 版本', (M.cdb && M.cdb.release) || '—'], ['节点数', st.nodes], ['单元数', st.elements],
+      ['单元类型', Object.entries(st.types).map(([k, v]) => k + ' × ' + v).join(', ')],
+      ['X 范围', fmt(b[0][0]) + ' – ' + fmt(b[1][0])], ['Y 范围', fmt(b[0][1]) + ' – ' + fmt(b[1][1])], ['Z 范围', fmt(b[0][2]) + ' – ' + fmt(b[1][2])],
+      ...(st.dim ? [['维度', { '3d': '三维', '2d': '平面', 'axi': '轴对称' }[st.dim] || st.dim]] : []),
+      ...(st.mass !== undefined ? [['质量', fmt(st.mass) + (st.massComplete ? '' : ' (不完整)')]] : []),
+      ...(lr ? [['CDB 载荷合力 (X, Y, Z)', lr.map(fmt).join(', ')]] : []),
+      ['求解段', seg.present ? `${seg.file}: ${seg.steps} 个载荷步` : `还没有 (${seg.file || '—'})`],
+      ...(st.sizeMB !== undefined ? [['文件大小 (MB)', st.sizeMB.toFixed(2)]] : []),
+      ['解析耗时 (s)', M.parseSeconds.toFixed(2)]], '模型 ' + M.file);
+    return;
+  }
   const feats = Object.entries(st.features || {}).map(([k, v]) => '*' + k + ' × ' + v).join(', ');
   showProp(M.file, [['文件', M.path], ['标题', M.heading || '—'], ['节点数', st.nodes], ['单元数', st.elements],
     ['单元类型', Object.entries(st.types).map(([k, v]) => k + ' × ' + v).join(', ')],
@@ -788,7 +1032,7 @@ function modal(title, html, okText, opt) {
 // ---------------------------------------------------------------- review / approval
 let review = null, reviewOk = true, pending = [];
 const STATE_TXT = { none: '未审查', approved: '已批准', rejected: '已退回', stale: '批准后文件已变更，需重新审查' };
-const pendKey = () => 'abq-preview-pending:' + curPath;
+const pendKey = () => 'abq-preview-pending:' + storeName(curKey);
 function savePending() { try { localStorage.setItem(pendKey(), JSON.stringify({ note: $('rvNote').value, comments: pending })); } catch (e) { /* storage may be unavailable */ } }
 function loadPending() {
   pending = []; $('rvNote').value = '';
@@ -823,15 +1067,15 @@ function addComment(target, current) {
   if (inp) { inp.scrollIntoView({ block: 'nearest' }); inp.focus(); }
 }
 async function loadReview() {
-  if (!curPath || !reviewOk) { renderReview(); return; }
-  try { review = await api('/api/review?path=' + enc(curPath)); }
+  if (!curKey || !reviewOk) { renderReview(); return; }
+  try { review = await api('/api/review?' + fileQuery(curKey)); }
   catch (e) { if (e.status === 404) reviewOk = false; review = null; }
   renderReview();
 }
 async function postReview(status, dryRun, from) {
-  const src = from || { note: $('rvNote').value, comments: pending };
+  const src = from || { note: $('rvNote').value, comments: pending }, s = splitKey(curKey);
   return api('/api/review', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ path: curPath, status, note: src.note, comments: src.comments, dryRun: !!dryRun }) });
+    body: JSON.stringify({ path: s.path, status, note: src.note, comments: src.comments, dryRun: !!dryRun, root: s.root }) });
 }
 async function decide(status) {
   if (!M) return;
@@ -852,14 +1096,14 @@ async function decide(status) {
   try {
     const r = await postReview(status);
     review = { state: r.state, entry: r.entry, current: true };
-    log(`${status === 'approved' ? '已批准求解' : '已退回修改'}: ${curPath}  (意见单 ${r.mdPath})`);
+    log(`${status === 'approved' ? '已批准求解' : '已退回修改'}: ${labelOf(curKey)}  (意见单 ${r.mdPath})`);
     pending = []; $('rvNote').value = ''; savePending();
     $('rvPanel').classList.remove('open');
     renderReview(); if (M) showPropAgain();
   } catch (e) { log('保存审查结论失败: ' + e.message, true); }
 }
 async function copyInstructions() {
-  if (!curPath) return;
+  if (!curKey) return;
   // what is being typed now, or - when nothing is - the decision that is already on record
   const fresh = pending.length || $('rvNote').value.trim(), e = review && review.entry;
   let text;
@@ -899,33 +1143,37 @@ function showBig(info) {
   $('bigBtn').disabled = !info.canForce;
   $('bigWhy').textContent = info.reason || (info.canForce ? '' : `可用内存不足：需要 ${fmt(info.estimatedMemoryGB + info.reserveGB).replace(/\.?0+$/, '')} GB 以上，已拒绝解析，以免挤掉正在运行的求解作业。`);
 }
-$('bigBtn').onclick = () => { if (bigInfo) loadModel(bigInfo.path, false, true); };
+$('bigBtn').onclick = () => { if (bigInfo) loadModel(bigInfo.key, false, true); };
 
-async function loadModel(path, keepView, force) {
+async function loadModel(key, keepView, force) {
   if (loading) return;
   loading = true;
   try {
-    const m = await api('/api/model?path=' + enc(path) + (force ? '&force=1' : ''), force ? { headers: { 'X-Abq-Preview': '1' } } : undefined);
-    const same = keepView && curPath === path && M;
+    const m = await api('/api/model?' + fileQuery(key) + (force ? '&force=1' : ''), force ? { headers: { 'X-Abq-Preview': '1' } } : undefined);
+    const same = keepView && curKey === key && M;
     const prevStep = $('stepSel').value;
     if (m.tooLarge) {
-      M = null; curPath = path; box = null;
-      if ($('fileSel').value !== path) $('fileSel').value = path;
+      M = null; curKey = key; box = null;
+      curSolver = (lastFiles.find(f => keyOf(f) === key) || {}).solver || 'abaqus'; applySkin(); clearTags();
+      if ($('fileSel').value !== key) $('fileSel').value = key;
       $('chkBadge').textContent = '–'; $('chkBadge').className = 'badge warn';
       clearGroup(gModel); clearGroup(gHi); clearGroup(gSym);
       $('tree').innerHTML = ''; $('checks').innerHTML = ''; $('prop').innerHTML = ''; $('legend').innerHTML = ''; $('symLegend').innerHTML = '';
       $('alert').style.display = $('partial').style.display = 'none';
-      m.mtime = (lastFiles.find(f => f.path === path) || {}).mtime;
+      m.mtime = (lastFiles.find(f => keyOf(f) === key) || {}).mtime;
+      m.key = key;
       showBig(m); updateTitle();
-      log(`${path}: ${m.sizeMB} MB，超过自动解析上限 ${m.limitMB} MB，未解析` + (m.reason ? '；' + m.reason : ''), true);
+      log(`${labelOf(key)}: ${m.sizeMB} MB，超过自动解析上限 ${m.limitMB} MB，未解析` + (m.reason ? '；' + m.reason : ''), true);
       loadPending(); await loadReview();
       loading = false;
       return;
     }
     showBig(null);
-    M = m; curPath = path;
-    if ($('fileSel').value !== path) $('fileSel').value = path;      // however the model was chosen, the list shows it
-    $('stepSel').innerHTML = '<option value="-1">Initial</option>' + M.steps.map((s, i) => `<option value="${i}">${esc(s.name)}</option>`).join('');
+    M = m; curKey = key; curSolver = m.solver || 'abaqus';
+    applySkin();
+    if ($('fileSel').value !== key) $('fileSel').value = key;      // however the model was chosen, the list shows it
+    $('stepSel').innerHTML = '<option value="-1">' + (M.solver === 'mapdl' ? '初始 (无载荷)' : 'Initial') + '</option>' +
+      M.steps.map((s, i) => `<option value="${i}">${esc(s.name)}</option>`).join('');
     $('stepSel').value = same && prevStep < M.steps.length ? prevStep : String(M.steps.length - 1);
     buildScene(same);
     if (!same) loadPending();
@@ -934,36 +1182,50 @@ async function loadModel(path, keepView, force) {
     await loadSymbols();
     await loadReview();
     const ne = M.checks.filter(c => c.level === 'error').length, nw = M.checks.filter(c => c.level === 'warn').length;
-    log(`已载入 ${path}: ${M.stats.nodes} 节点, ${M.stats.elements} 单元, ${M.steps.length} 个分析步; 体检 ${ne} 错误 ${nw} 警告`, ne > 0);
-  } catch (e) { log('载入失败 ' + path + ': ' + e.message, true); }
+    log(`已载入 ${labelOf(key)}: ${M.stats.nodes} 节点, ${M.stats.elements} 单元, ${M.steps.length} 个分析步; 体检 ${ne} 错误 ${nw} 警告`, ne > 0);
+  } catch (e) { log('载入失败 ' + labelOf(key) + ': ' + e.message, true); }
   loading = false;
 }
 function updateTitle() {
   const s = $('stepSel');
-  const name = curPath ? curPath.split('/').pop().replace(/\.inp$/i, '') : '—';
+  const name = curKey ? splitKey(curKey).path.split('/').pop().replace(/\.(inp|cdb)$/i, '') : '—';
+  if (skinOf() === 'mapdl') {
+    const { analysis } = stepInfo();
+    $('vpTitle').textContent = `${analysis}    ${name}    ${s.selectedOptions[0] ? s.selectedOptions[0].textContent : '—'}`;
+    return;
+  }
   $('vpTitle').textContent = `Viewport: 1    模型: ${name}    分析步: ${M && s.selectedOptions[0] ? s.selectedOptions[0].textContent : '—'}`;
 }
-let lastSeen = {}, filesKey = '', lastFiles = [], pollN = 0;
+let lastSeen = {}, filesKey = '', lastFiles = [], pollN = 0, heldFor = null, saidCdb = false;
 async function poll() {
   let L;
   try { L = await api('/api/list'); } catch (e) { return; }
-  const files = lastFiles = L.files, key = files.map(f => f.path).sort().join('|');
+  rootNames = (L.roots || []).map(r => r.name);
+  const files = lastFiles = L.files, key = files.map(keyOf).sort().join('\n');
+  // the start line names .inp only (the Abaqus look stays as it was); say so once when ANSYS files are watched too
+  if (!saidCdb && files.some(f => f.solver === 'mapdl')) { saidCdb = true; log('同时监视 ANSYS（MAPDL）的 .cdb 文件'); }
   if (key !== filesKey) {
     filesKey = key;
-    $('fileSel').innerHTML = files.length ? files.map(f => `<option value="${esc(f.path)}">${esc(f.path)}</option>`).join('') : '<option value="">(工作区内没有 .inp)</option>';
-    if (curPath) $('fileSel').value = curPath;
+    $('fileSel').innerHTML = files.length ? files.map(f => `<option value="${esc(keyOf(f))}">${esc(labelOf(keyOf(f)))}</option>`).join('')
+      : `<option value="">${L.roots ? '(工作区内没有可预览的文件)' : '(工作区内没有 .inp)'}</option>`;
+    if (curKey) $('fileSel').value = curKey;
   }
   if (!files.length) { lastSeen = {}; return; }
-  const stable = f => lastSeen[f.path] === f.mtime;   // unchanged for one poll cycle = writer has finished
+  const stable = f => lastSeen[keyOf(f)] === f.mtime;   // unchanged for one poll cycle = writer has finished
   const newest = files[0];
   const shown = M ? M.mtime : bigInfo ? bigInfo.mtime : undefined;
   let target = null;
-  if (!curPath) target = newest;
-  else if ($('followChk').checked && newest.path !== curPath && (shown === undefined || newest.mtime > shown)) target = newest;
-  else { const cur = files.find(f => f.path === curPath); if (cur && shown !== undefined && cur.mtime !== shown) target = cur; }
-  if (target && stable(target)) { $('fileSel').value = target.path; await loadModel(target.path, true); }
-  else if (curPath && ++pollN % 4 === 0 && !loading) loadReview();        // a decision may come from another window
-  lastSeen = Object.fromEntries(files.map(f => [f.path, f.mtime]));
+  if (!curKey) target = newest;
+  else if ($('followChk').checked && keyOf(newest) !== curKey && (shown === undefined || newest.mtime > shown)) {
+    // a review being written is not left behind: no jump to another file while it has unsent text
+    if (pending.length || $('rvNote').value.trim()) {
+      if (heldFor !== keyOf(newest)) { heldFor = keyOf(newest); log(`有未提交的审查意见, 暂不跳到最新的 ${labelOf(heldFor)}; 提交或清空意见后再跟随`); }
+    } else target = newest;
+  }
+  else { const cur = files.find(f => keyOf(f) === curKey); if (cur && shown !== undefined && cur.mtime !== shown) target = cur; }
+  if (target && stable(target)) { $('fileSel').value = keyOf(target); await loadModel(keyOf(target), true); }
+  else if (curKey && ++pollN % 4 === 0 && !loading) loadReview();        // a decision may come from another window
+  lastSeen = Object.fromEntries(files.map(f => [keyOf(f), f.mtime]));
 }
 $('fileSel').onchange = e => { if (e.target.value) { $('followChk').checked = false; loadModel(e.target.value, false); } };
 $('stepSel').onchange = () => { updateTitle(); loadSymbols(); };
@@ -971,13 +1233,14 @@ $('colorSel').onchange = applyColors;
 $('edgeChk').onchange = e => { if (edgeLines) edgeLines.visible = e.target.checked; dirty = true; };
 $('symChk').onchange = loadSymbols;
 $('intChk').onchange = () => M && buildTree();
-$('upSel').onchange = () => M && setView('iso');
+$('upSel').onchange = () => { setUpChoice($('upSel').value); if (M) setView('iso'); };
 $('views').querySelectorAll('button').forEach(b => b.onclick = () => M && setView(b.dataset.v));
 layout(); resize(); renderReview();
 log('预览已启动, 正在监视工作区内的 .inp 文件');
 // hooks for automated tests
-window.__preview = { get model() { return M; }, setView, renderer, get review() { return review; }, get pending() { return pending; },
-  get tooLarge() { return bigInfo; }, get path() { return curPath; }, get busy() { return loading; }, addComment, decide, loadModel,
+window.__preview = { get model() { return M; }, setView, renderer, get camera() { return camera; }, get controls() { return controls; },
+  get review() { return review; }, get pending() { return pending; },
+  get tooLarge() { return bigInfo; }, get path() { return curKey === null ? null : splitKey(curKey).path; }, get key() { return curKey; }, get busy() { return loading; }, addComment, decide, loadModel,
   lastCopied: null,
   drawnFraction() {      // share of the viewport the model covers (the canvas is transparent where nothing is drawn)
     renderer.render(scene, camera);

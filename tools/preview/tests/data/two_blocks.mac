@@ -1,0 +1,25 @@
+! two_blocks.mac -- two bricks stacked at z = 1 whose meshes touch but share no node and have no contact pair;
+! the lower one is held at z = 0, the upper one carries a load: the preview must report the untied interface
+! and the upper block's rigid body motion.  Units m, N, kg.
+/PREP7
+ET,1,SOLID185
+MP,EX,1,2.0E11
+MP,PRXY,1,0.3
+MP,DENS,1,7850
+BLOCK,0,1,0,1,0,1
+BLOCK,0,1,0,1,1,2
+ESIZE,0.5
+VMESH,ALL
+NSEL,S,LOC,Z,0
+CM,BASE_N,NODE
+D,BASE_N,ALL
+NSEL,S,LOC,Z,2
+CM,TOP_N,NODE
+F,TOP_N,FZ,-10.0
+ALLSEL
+FINISH
+/PREP7
+ALLSEL
+CDWRITE,DB,two_blocks,cdb
+FINISH
+/EXIT,NOSAVE

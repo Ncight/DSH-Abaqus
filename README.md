@@ -2,6 +2,8 @@
 
 这个工作区给 DeepSeek Harness（DSH）里的模型配了四样东西：一套工具、一套知识、一道人工闸门、一个能自己变好的评测闭环。在 DSH 里把工作区选为 `E:\DSH-Abaqus`，它们就自动生效。
 
+同一套代码也带 ANSYS（MAPDL）版：工具箱 `tools/ans/`，预览面板也认 MAPDL 的 CDB。模型用的工作区单独放在 [DSH-Ansys](https://github.com/Ncight/DSH-Ansys)，见下面「ANSYS（MAPDL）」一节。
+
 ## 目录
 
 | 路径 | 是什么 |
@@ -9,7 +11,8 @@
 | `AGENTS.md` | 每次会话都会读到的工作区说明：流程、硬性规则、工具清单 |
 | `.dsh/skills/` | 按需加载的专题知识（脚本、直接写 INP、单元网格、接触、动力、材料单位、岩土与地震、梁壳、后处理、排错、方案） |
 | `abq.cmd`、`tools/abq/` | Abaqus 工具箱：运行脚本、体检、求解、读结果、核查、出图、查接口、找官方算例 |
-| `tools/preview/` | Abaqus 风格的 INP 预览面板（三维预览 + 参数树 + 体检 + 审查批准） |
+| `tools/preview/` | 预览面板（三维预览 + 参数树 + 体检 + 审查批准）：INP 用 Abaqus 的样子，MAPDL 的 CDB 用 ANSYS 的样子；可以同时看几个工作区 |
+| `tools/ans/` | ANSYS（MAPDL）工具箱 ans：建模、体检、求解、取结果、核查；由 DSH-Ansys 工作区的 `ans.cmd` 调用 |
 | `cases/` | 已验证的案例库（脚本 + 做法要点 + 踩过的坑 + 验证数值） |
 | `dsh-plugin/` | DSH 插件：在开了闸门的工作区里拦截绕过审查的求解命令 |
 | `eval/` | 评测集、批量评测、失败归因与自动改进脚本、skill 示例的验证脚本 |
@@ -56,6 +59,38 @@ abq cases 接触             检索已验证案例库
 - 装上 `dsh-plugin\abq-gate` 插件后，DSH 直接拒绝模型在该工作区里绕过工具调用 `abaqus job=…` 或 `abaqus cae …`。安装：运行 `dsh-plugin\install.cmd`，然后重启 DSH；卸载：`dsh plugin --profile desktop remove @local/abq-gate`。不装插件时，前两条仍然有效，但模型理论上可以直接调用 abaqus 绕过。
 - 闸门只有人能关。DSH 给模型跑的命令都带着 `DSH_*` 会话环境变量：在这种命令里 `abq gate off` 直接拒绝，环境变量 `ABQ_GATE` 也不起作用；插件还拦截模型改写 `.abq` 下的配置和批准记录（命令和文件工具都拦）。实拍中 Flash 曾以"会话权限是不再询问"为由自己运行 `abq gate off`，所以补了这一条。
 - 回归测试：`py tools\preview\tests\gate_e2e.py`（面板写入审查结论 → 工具读取；需要面板在运行）。
+
+## ANSYS（MAPDL）
+
+做法和 Abaqus 版一样：模型写命令流建模，人在面板里审，批准了才求解。代码都在这个仓库里；模型每次会话要读的东西（`AGENTS.md`、`ans.cmd`、5 份 skill、闸门开关）在 [DSH-Ansys](https://github.com/Ncight/DSH-Ansys)，在 DSH 里把工作区选为 `E:\DSH-Ansys`。在 Ansys 2025 R1 上做和测的。
+
+一道题三个文件，都在作业的文件夹里：
+
+- `<job>.build.mac`：建模命令流（几何、网格、材料、组件、初始的约束和载荷），不能求解；
+- `<job>.cdb`：`ans build` 让 MAPDL 用 CDWRITE 导出的模型，人在面板里审的就是它；
+- `<job>.solve.dat`：求解段（分析类型、载荷步、对组件加载、SOLVE），只能用白名单里的命令，面板列出每个载荷步的约束和载荷。
+
+工具箱 `tools\ans\ans.py`，`-h` 列出全部命令：
+
+```
+ans build job        跑建模命令流，导出 job.cdb 并体检；命令流里求解过就作废
+ans check job        不启动 MAPDL：解析 CDB 和求解段，核对白名单，给出模型摘要和体检结果
+ans mesh job         网格质量（长宽比、角度、雅可比、最差单元）
+ans run job          核对批准记录 → 在干净目录里读入 CDB、执行求解段 → 结果摘要和核查结论
+ans rst job          最大位移、反力合计、最大等效应力、频率；--comp 组件上的应力和合计；--step N 某个载荷步末；
+                     --lin x1,y1,z1,x2,y2,z2 沿评定线做应力线性化（PRSECT：薄膜、薄膜+弯曲、峰值、总应力）
+ans verify job       收工前核查：正常结束了吗、结果是不是现在这份 CDB 和求解段算出来的
+ans gate status|on|off
+```
+
+- 闸门和 Abaqus 版是同一套：批准记录在工作区的 `.abq/review.json`，按 CDB 和求解段两份内容的 SHA-256 记，哪一份改了都要重审；CDB 还必须是最近一次 `ans build` 导出的那一份，手改过的不让算；模型的命令里关不掉闸门。
+- 插件 `dsh-plugin\abq-gate` 也管 ANSYS：开了闸门的工作区里，直接调用 `ANSYS251`、`mapdl`、`runwb2` 的命令会被拒绝，只能走 `ans`。
+- 面板按文件内容认软件：CDB 换成 ANSYS 的样子（大纲树、约束和载荷用字母标注、图例），INP 还是 Abaqus 的样子。超过 60 MB 的文件不自动解析（环境变量 `ABQ_PREVIEW_MAX_AUTO_MB` 可改），先报出预计要占多少内存，等人点「仍然解析」。
+- 面板同时看几个工作区：在 `tools\preview\` 下建 `extra_roots.local.txt`，一行写一个文件夹（比如 `E:\DSH-Ansys`），`start_preview.cmd` 会带上它。
+- 和 `abq` 一样，启动 MAPDL 前先看系统可用内存，过低就等待。
+- 换机器：MAPDL 的位置用环境变量 `ANS_MAPDL_EXE` 指定（默认 `D:\Program Files\ANSYS Inc\v251\ansys\bin\winx64\ANSYS251.exe`）。中文系统上的 MAPDL 2025 R1 缺语言文件 `fx0.msb`，`ans` 只给自己启动的 MAPDL 把 `CADOE_LIBDIR251` 指到 en-us 语言目录（`tools\ans\mapdl_run.py` 里的 `LANG_FIX`）；别的版本或装在别处要改这一行。插件提示语和 `skill_checks\run_all.py` 里写着 `E:\DSH-Ansys`（`git grep -lF "E:\DSH-Ansys"` 列出）。
+- 测试：`tools\ans\tests\` 下的 `test_roundtrip.py`（同一个模型直接求解和走 CDB + 求解段，结果一致）、`test_rst_extras.py`、`test_rst_lin.py`（对厚壁圆筒的 Lamé 解）、`test_ans_gate.py`，都要本机 MAPDL；`py tools\ans\skill_checks\run_all.py` 把 skill 里引用的 14 个例子全部实跑一遍，和手算对。面板的测试：`tools\preview\tests\test_mapdl_model.py`、`test_solve_segment.py`、`test_multiroot.py`。
+- 仓库里没有任何 ANSYS 自带的内容；测试用的 CDB 都是用仓库里的命令流在本机生成的。
 
 ## 评测与自动改进
 
@@ -147,6 +182,6 @@ py eval\optimize.py cycle --name cyc1 --suite basic,hard --repeats 2 --parallel 
 
 本仓库以 GNU 通用公共许可证第 3 版（GPL-3.0）发布，全文见 `LICENSE`。
 
-`tools/preview/static/` 下的 three.js（r160）和 OrbitControls 来自 three.js 项目，版权归 three.js 作者所有，MIT 许可，许可全文见 `tools/preview/static/LICENSE-three.txt`。
+`tools/preview/static/three.module.js`（three.js r160）来自 three.js 项目，版权归 three.js 作者所有，MIT 许可，许可全文见 `tools/preview/static/LICENSE-three.txt`。面板的转动控制 `ViewControls.js` 是本项目自己写的。
 
-Abaqus 是达索系统的注册商标。本项目与达索系统、DeepSeek 均无关联，使用它需要你自己合法取得的 Abaqus 许可。
+Abaqus 是达索系统的注册商标，ANSYS 和 MAPDL 是 ANSYS, Inc. 的商标。本项目与达索系统、ANSYS, Inc.、DeepSeek 均无关联，使用它需要你自己合法取得的 Abaqus 或 ANSYS 许可。

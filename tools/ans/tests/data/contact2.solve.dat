@@ -1,0 +1,11 @@
+! two load steps: 1 MPa, then 2 MPa on the top of the upper block
+/SOLU
+ANTYPE,STATIC
+NLGEOM,OFF
+NSUBST,2,10,1
+OUTRES,ALL,ALL
+SF,NTOP,PRES,1.0E6
+SOLVE
+SF,NTOP,PRES,2.0E6
+SOLVE
+FINISH

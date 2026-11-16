@@ -208,6 +208,14 @@ def first_visible(page, selectors):
 
 def drive(page, preview_url, a):
     """expand the right sidebar, open a Browser tab on the preview URL, check the page in the iframe"""
+    frame = open_frame(page, preview_url, a)
+    if frame is None:
+        return False
+    return check_frame(page, frame, preview_url)
+
+
+def open_frame(page, preview_url, a):
+    """expand the right sidebar, open a Browser tab on the preview URL -> the frame of the page (None: failed)"""
     ADDR = ['input[type=url]', 'input[placeholder*="http" i]', 'input[aria-label*="address" i]',
             'input[aria-label*="地址"]', 'input[placeholder*="URL" i]', 'input[placeholder*="网址"]',
             'input[aria-label*="URL" i]', 'input[placeholder*="地址"]']
@@ -263,17 +271,17 @@ def drive(page, preview_url, a):
         if b is None:
             print('found neither the Browser command nor a Browser entry in the sidebar guide '
                   '(is the profile patch applied? does the start page need a login?); see shots/dsh_ui_*.json')
-            return False
+            return None
         b.click(timeout=8000)
         page.wait_for_timeout(1500)
         items = dump_ui(page, '3_browser_tab')
         addr = first_visible(page, ADDR)
-        if addr is None and a.explore:
+        if addr is None and getattr(a, 'explore', False):
             for it in items[:150]:
                 print('   ', json.dumps(it, ensure_ascii=False))
     if addr is None:
         print('no address field in the Browser tab; see shots/dsh_ui_3_browser_tab.json')
-        return False
+        return None
     addr.fill(preview_url)
     addr.press('Enter')
     # 4. the page inside the iframe
@@ -286,7 +294,11 @@ def drive(page, preview_url, a):
     if frame is None:
         dump_ui(page, '4_no_frame')
         print('the Browser tab did not create a frame for', preview_url)
-        return False
+    return frame
+
+
+def check_frame(page, frame, preview_url):
+    """the page in the frame has a model, draws it, follows a newer file, reacts to a tree click"""
     frame.wait_for_function('window.__preview && window.__preview.model && !window.__preview.busy', timeout=60000)
     page.wait_for_timeout(1500)
     info = frame.evaluate("""() => { const p = window.__preview, m = p.model; return {

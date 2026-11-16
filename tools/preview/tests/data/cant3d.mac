@@ -1,0 +1,19 @@
+! cant: solid cantilever 1 m x 0.05 m x 0.05 m, steel, fixed at x = 0 (component NFIX), tip nodes at x = 1 (NTIP)
+! units m, N, Pa, kg
+/PREP7
+ET,1,SOLID185
+MP,EX,1,2.0E11
+MP,PRXY,1,0.3
+MP,DENS,1,7850
+BLOCK,0,1,0,0.05,0,0.05
+ESIZE,0.0125
+VMESH,ALL
+NSEL,S,LOC,X,0
+CM,NFIX,NODE
+NSEL,S,LOC,X,1
+CM,NTIP,NODE
+ESEL,S,CENT,X,0.5,1
+CM,EOUTER,ELEM
+ALLSEL,ALL
+D,NFIX,ALL,0
+FINISH

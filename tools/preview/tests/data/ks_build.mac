@@ -1,0 +1,217 @@
+! ks_build.mac -- DSH step 0 kitchen-sink model: every item on the CDWRITE checklist appears at least once.
+! Units m, N, Pa, kg.  Not a physical design; each sub-structure is supported on its own so the model solves.
+!   V1/V2/V3  stacked blocks (SOLID185); V1-V2 bonded contact, V2-V3 frictional contact
+!   V4        SOLID187 tetrahedral cylinder;  V5  SOLID185 meshed as degenerate tetrahedra
+!   shell     SHELL181 plate, edge fixed with DL, pressure by node component, CE and CP
+!   beam      BEAM188 cantilever + COMBIN14 spring + MASS21, a node rotated into LOCAL 11, a table force
+/PREP7
+! ---- ordinary parameters
+P0 = 2.0E5
+FZ0 = -500.0
+! ---- table parameter used by a nodal force
+*DIM,FTAB,TABLE,3,1,1,TIME
+FTAB(1,0) = 0.0
+FTAB(2,0) = 1.0
+FTAB(3,0) = 2.0
+FTAB(1,1) = 0.0
+FTAB(2,1) = -1000.0
+FTAB(3,1) = -2000.0
+! ---- element types
+ET,1,SOLID185
+ET,2,SHELL181
+ET,3,BEAM188
+ET,4,COMBIN14
+ET,5,CONTA174
+ET,6,TARGE170
+ET,7,MASS21
+ET,8,SOLID187
+ET,9,CONTA174
+ET,10,TARGE170
+KEYOPT,5,2,2
+KEYOPT,5,12,5
+KEYOPT,7,3,2
+! ---- materials: 1 steel + bilinear plasticity, 2 aluminium + multilinear plasticity, 3 friction only
+MP,EX,1,2.0E11
+MP,PRXY,1,0.3
+MP,DENS,1,7850
+MP,ALPX,1,1.2E-5
+TB,BISO,1,1,2
+TBDATA,1,2.5E8,1.0E9
+MP,EX,2,7.0E10
+MP,PRXY,2,0.33
+MP,DENS,2,2700
+MP,ALPX,2,2.3E-5
+TB,PLASTIC,2,1,3,MISO
+TBPT,DEFI,0.0,1.5E8
+TBPT,DEFI,0.01,1.8E8
+TBPT,DEFI,0.05,2.2E8
+MP,MU,3,0.2
+TREF,0.0
+! ---- sections and real constants
+SECTYPE,1,SHELL
+SECDATA,0.01,2,0.0,3
+SECTYPE,2,BEAM,RECT
+SECDATA,0.05,0.08
+R,4,1.0E6
+R,5
+R,6
+R,7,10.0
+! ---- local coordinate system 11: origin (7,0,0), rotated 30 deg about Z
+LOCAL,11,0,7.0,0.0,0.0,30.0
+CSYS,0
+! ---- three stacked blocks
+BLOCK,0,1,0,1,0,0.2
+BLOCK,0,1,0,1,0.2,0.4
+BLOCK,0,1,0,1,0.4,0.6
+ESIZE,0.1
+TYPE,1
+MAT,1
+VMESH,1
+VMESH,2
+MAT,2
+VMESH,3
+! ---- V4: SOLID187 tetrahedral cylinder; V5: SOLID185 meshed as degenerate tetrahedra
+CYL4,10,0,0.2,,,,0.4
+BLOCK,12,12.4,0,0.4,0,0.4
+MSHAPE,1,3D
+MSHKEY,0
+TYPE,8
+MAT,1
+ESIZE,0.08
+VMESH,4
+TYPE,1
+ESIZE,0.1
+VMESH,5
+MSHAPE,0,3D
+! ---- contact pair 1 (bonded, real 5): top of V1 / bottom of V2
+VSEL,S,VOLU,,1
+ESLV,S
+NSLE,S
+NSEL,R,LOC,Z,0.2
+TYPE,5
+REAL,5
+MAT,1
+ESURF
+VSEL,S,VOLU,,2
+ESLV,S
+NSLE,S
+NSEL,R,LOC,Z,0.2
+TYPE,6
+REAL,5
+ESURF
+! ---- contact pair 2 (standard, friction from MAT 3, real 6): top of V2 / bottom of V3
+VSEL,S,VOLU,,2
+ESLV,S
+NSLE,S
+NSEL,R,LOC,Z,0.4
+TYPE,9
+REAL,6
+MAT,3
+ESURF
+VSEL,S,VOLU,,3
+ESLV,S
+NSLE,S
+NSEL,R,LOC,Z,0.4
+TYPE,10
+REAL,6
+ESURF
+ALLSEL
+! ---- solid-model constraints and loads (reach the FE model only through SBCTRAN / SOLVE)
+ASEL,S,LOC,Z,0
+DA,ALL,ALL
+ASEL,S,LOC,Z,0.6
+DA,ALL,ALL
+ASEL,S,LOC,X,1
+ASEL,R,LOC,Z,0.3
+SFA,ALL,1,PRES,P0
+ALLSEL
+! ---- shell plate at z = 1.0 (x 3..4, y 0..0.5)
+K,101,3.0,0.0,1.0
+K,102,4.0,0.0,1.0
+K,103,4.0,0.5,1.0
+K,104,3.0,0.5,1.0
+A,101,102,103,104
+*GET,ASHELL,AREA,0,NUM,MAX
+TYPE,2
+MAT,2
+SECNUM,1
+ESIZE,0.1
+AMESH,ASHELL
+LSEL,S,LOC,X,3.0
+LSEL,R,LOC,Z,1.0
+DL,ALL,,ALL
+ALLSEL
+ASEL,S,AREA,,ASHELL
+NSLA,S,1
+CM,SHELL_N,NODE
+ALLSEL
+SF,SHELL_N,PRES,1000.0
+NA = NODE(4.0,0.0,1.0)
+NB = NODE(4.0,0.5,1.0)
+NC = NODE(4.0,0.2,1.0)
+ND = NODE(4.0,0.3,1.0)
+F,NB,FZ,FZ0
+CE,1,0.0,NA,UZ,1.0,NB,UZ,-1.0
+CP,1,UX,NC,ND
+! ---- cantilever beam with spring, point mass, a rotated node and a table force
+*GET,NBASE,NODE,0,NUM,MAX
+NB1 = NBASE + 1
+NB6 = NBASE + 6
+NB11 = NBASE + 11
+NGND = NBASE + 12
+TYPE,3
+MAT,1
+SECNUM,2
+N,NB1,7.0,0.0,0.0
+N,NB11,8.0,0.0,0.0
+FILL,NB1,NB11
+E,NB1,NB1+1
+*GET,EB1,ELEM,0,NUM,MAX
+EGEN,10,1,EB1
+TYPE,7
+REAL,7
+E,NB11
+N,NGND,8.0,0.0,-1.0
+TYPE,4
+REAL,4
+E,NB11,NGND
+D,NB1,ALL
+D,NGND,ALL
+CSYS,11
+NROTAT,NB6
+CSYS,0
+D,NB6,UX,0.0
+F,NB11,FY,%FTAB%
+IC,NB11,UY,0.0,0.5
+NSEL,S,NODE,,NB11
+CM,BEAM_TIP,NODE
+ALLSEL
+! ---- body loads and acceleration
+VSEL,S,VOLU,,2
+ESLV,S
+NSLE,S
+BF,ALL,TEMP,50.0
+ALLSEL
+VSEL,S,VOLU,,1
+ESLV,S
+ESEL,R,CENT,Z,0.0,0.1
+ESEL,R,CENT,X,0.0,0.3
+CM,V1_HOT,ELEM
+ALLSEL
+BFE,V1_HOT,TEMP,1,30.0
+ACEL,0.0,0.0,9.81
+! ---- components used by the solve segment
+ASEL,S,LOC,X,1
+ASEL,R,LOC,Z,0.3
+NSLA,S,1
+CM,V2_XFACE_N,NODE
+ALLSEL
+VSEL,S,VOLU,,2
+NSLV,S,1
+CM,V2_N,NODE
+ALLSEL
+VSEL,S,VOLU,,5
+ESLV,S
+CM,V5_E,ELEM
+ALLSEL
+FINISH

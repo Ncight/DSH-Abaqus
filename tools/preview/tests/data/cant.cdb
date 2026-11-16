@@ -1,0 +1,91 @@
+/COM,ANSYS RELEASE 2025 R1           BUILD 25.1      UP20241202       16:09:36
+/PREP7
+/NOPR
+/TITLE,DSH step0 t09 cantilever model for result extraction                    
+*IF,_CDRDOFF,EQ,1,THEN     !if solid model was read in
+_CDRDOFF=             !reset flag, numoffs already performed
+*ELSE              !offset database for the following FE model
+NUMOFF,NODE,       11
+NUMOFF,ELEM,       10
+NUMOFF,MAT ,        1
+NUMOFF,SECN,        1
+NUMOFF,TYPE,        1
+*ENDIF
+*SET,_RETURN ,  0.000000000000    
+*SET,_STATUS ,  0.000000000000    
+DOF,DELETE
+ETBLOCK,        1,        1
+(2i9,19a9)
+        1      188        0        0        0        0        0        0        0        0        0        0        0        0        0        0        0        0        0        0        0
+       -1
+NBLOCK,6,SOLID,        11,        11
+(3i9,6e21.13e3)
+        1        0        0 0.0000000000000E+000
+        2        0        0 1.0000000000000E-001
+        3        0        0 2.0000000000000E-001
+        4        0        0 3.0000000000000E-001
+        5        0        0 4.0000000000000E-001
+        6        0        0 5.0000000000000E-001
+        7        0        0 6.0000000000000E-001
+        8        0        0 7.0000000000000E-001
+        9        0        0 8.0000000000000E-001
+       10        0        0 9.0000000000000E-001
+       11        0        0 1.0000000000000E+000
+N,UNBL,LOC,       -1,
+EBLOCK,19,SOLID,        10,        10
+(19i10)
+         1         1         1         1         0         0         0         0         2         0         1         1         2
+         1         1         1         1         0         0         0         0         2         0         2         2         3
+         1         1         1         1         0         0         0         0         2         0         3         3         4
+         1         1         1         1         0         0         0         0         2         0         4         4         5
+         1         1         1         1         0         0         0         0         2         0         5         5         6
+         1         1         1         1         0         0         0         0         2         0         6         6         7
+         1         1         1         1         0         0         0         0         2         0         7         7         8
+         1         1         1         1         0         0         0         0         2         0         8         8         9
+         1         1         1         1         0         0         0         0         2         0         9         9        10
+         1         1         1         1         0         0         0         0         2         0        10        10        11
+        -1
+CMBLOCK,FIX_N   ,NODE,       1  ! users node component definition
+(8i10)
+         1
+CMBLOCK,TIP_N   ,NODE,       1  ! users node component definition
+(8i10)
+        11
+MPTEMP,UNBL, 1, 1,  0.00000000    ,
+MPDATA,UNBL, 1,EX  ,       1, 1, 2.100000000E+11,
+MPTEMP,UNBL, 1, 1,  0.00000000    ,
+MPDATA,UNBL, 1,DENS,       1, 1,  7850.00000    ,
+MPTEMP,UNBL, 1, 1,  0.00000000    ,
+MPDATA,UNBL, 1,PRXY,       1, 1, 0.300000000    ,
+SECTYPE,        1,BEAM,RECT,        
+SECDATA, 0.10000    , 0.10000    ,
+SECOFFSET,CENT
+SECCONTROL,  0.0000    ,  0.0000    ,  0.0000    ,  0.0000    ,  0.0000    
+EXTOPT,ATTR,      0,      0,      0
+EXTOPT,ESIZE,  0,  0.0000    
+EXTOPT,ACLEAR,      0
+TREF,  0.00000000
+IRLF,  0
+BFUNIF,TEMP,_TINY
+ACEL,  0.00000000    ,  0.00000000    ,  0.00000000
+OMEGA,  0.00000000    ,  0.00000000    ,  0.00000000
+DOMEGA,  0.00000000    ,  0.00000000    ,  0.00000000
+CGLOC,  0.00000000    ,  0.00000000    ,  0.00000000
+CGOMEGA,  0.00000000    ,  0.00000000    ,  0.00000000
+DCGOMG,  0.00000000    ,  0.00000000    ,  0.00000000
+
+KUSE,     0
+TIME,  0.00000000
+ALPHAD,  0.00000000
+BETAD,  0.00000000
+DMPRAT,  0.00000000
+DMPSTR,  0.00000000
+
+CRPLIM, 0.100000000    ,   0
+CRPLIM,  0.00000000    ,   1
+NCNV,     1,  0.00000000    ,     0,  0.00000000    ,  0.00000000
+NEQIT,     0
+
+ERESX,DEFA
+/GO
+FINISH

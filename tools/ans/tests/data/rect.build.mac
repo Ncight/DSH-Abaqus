@@ -1,0 +1,18 @@
+! rect: solid cantilever 1 m long, 50 mm high (y) x 25 mm wide (z), steel, fixed at x = 0 (NFIX), tip at x = 1 (NTIP)
+! bends twice as easily sideways (z) as up and down (y): the first mode moves in z, the second in y
+! units m, N, Pa, kg
+/PREP7
+ET,1,SOLID185
+MP,EX,1,2.0E11
+MP,PRXY,1,0.3
+MP,DENS,1,7850
+BLOCK,0,1,0,0.05,0,0.025
+ESIZE,0.0125
+VMESH,ALL
+NSEL,S,LOC,X,0
+CM,NFIX,NODE
+NSEL,S,LOC,X,1
+CM,NTIP,NODE
+ALLSEL,ALL
+D,NFIX,ALL,0
+FINISH

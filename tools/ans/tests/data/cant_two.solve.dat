@@ -1,0 +1,12 @@
+! two load steps: tip force, then the force removed and a gravity load
+/SOLU
+ANTYPE,STATIC
+OUTRES,ALL,ALL
+TIME,1
+F,NTIP,FZ,-4
+SOLVE
+TIME,2
+FDELE,NTIP,FZ
+ACEL,0,0,9.81
+SOLVE
+FINISH

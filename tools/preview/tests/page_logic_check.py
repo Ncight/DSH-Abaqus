@@ -3,8 +3,8 @@
 
     py page_logic_check.py [--html static/index.html] [--module-dir DIR] [--only substring]
 
-What is real:   the page script (taken out of index.html), three.module.js r160 and OrbitControls.js as
-                vendored, the model / symbol / highlight JSON produced by inp_model.py for corpus files.
+What is real:   the page script (taken out of index.html), three.module.js r160 as vendored, the camera controls
+                (ViewControls.js), the model / symbol / highlight JSON produced by inp_model.py for corpus files.
 What is faked:  the DOM (elements are plain objects), the 2-D canvas context, fetch() (answers from the
                 prepared JSON, review endpoints included) and THREE.WebGLRenderer (draws nothing).
 
@@ -43,7 +43,7 @@ FILES = [f for f in FILES if os.path.isfile(os.path.join(CORPUS, f.replace('/', 
 
 HEAD = r'''
 import * as THREE_REAL from 'three';
-import { OrbitControls } from './OrbitControls.js';
+import { ViewControls } from './ViewControls.js';
 import fs from 'node:fs';
 
 const P = new Proxy(function () {}, {
@@ -296,7 +296,7 @@ def main():
         shutil.copy2(os.path.join(static, 'three.module.js'), pkg)
         with open(os.path.join(pkg, 'package.json'), 'w') as f:
             json.dump({'name': 'three', 'type': 'module', 'main': 'three.module.js', 'exports': './three.module.js'}, f)
-        shutil.copy2(os.path.join(static, 'OrbitControls.js'), work)
+        shutil.copy2(os.path.join(static, 'ViewControls.js'), work)
         with open(os.path.join(work, 'package.json'), 'w') as f:
             json.dump({'type': 'module'}, f)
         with open(os.path.join(work, 'data.json'), 'w', encoding='utf-8') as f:
