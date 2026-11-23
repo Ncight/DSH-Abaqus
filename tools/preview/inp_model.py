@@ -4264,7 +4264,11 @@ class Model(object):
                     label, ' 约' if approx else '', _fmt(lo), _fmt(diag)))
             else:
                 msg = '%s: 初始间隙 %s%s – %s (%s)' % (label, approx, _fmt(lo, diag), _fmt(hi, diag), note)
-                if lo < -1e-9 * diag:
+                adj = next((v for k, v in (cp.get('params') or {}).items() if str(k).upper() == 'ADJUST'), None)
+                if lo < -1e-9 * diag and adj is not None:
+                    msg += '; 几何上有初始过盈 %s, 但接触对已设 adjust=%s, 求解开始时会把这些从面节点无应变地挪到主面上, 不会产生过盈应力' % (
+                        _fmt(-lo), adj if adj != '' else '(默认)')
+                elif lo < -1e-9 * diag:
                     msg += '; 最小值为负, 即存在初始过盈 %s, 请确认是否有意' % _fmt(-lo)
                 infos.append((lo, hi, msg))
         for lo, hi, msg in infos[:6]:

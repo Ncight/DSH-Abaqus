@@ -2,6 +2,7 @@
 """How every MAPDL process of the ANSYS toolbox is started and judged (ANSYS plan v2.1, 4.1 and 4.7).
 
     r = run(rundir, 'build_input.inp', 'beam', timeout=600)      # -> dict, see run()
+    r = run(rundir, 'run_input.inp', 'beam', timeout=0, cpus=4, watch=f)   # no wall-clock limit, f(p) follows the run
 
 * Always the same command line: ANSYS251.exe -b -s noread -np N [-smp] -i <input> -o output.out -dir <rundir>
   -j <job>.  `-s noread` keeps MAPDL from reading a start.ans in the run directory; -smp (shared memory) when
@@ -146,23 +147,35 @@ def messages(text, tag, limit=10):
     return out
 
 
-def run(rundir, inp, job, timeout=3600, cpus=1, out='output.out', say=print):
-    """start MAPDL on <rundir>/<inp> -> {'rc', 'timedOut', 'seconds', 'ok', 'errors', 'warnings', 'lost', 'out',
-    'freeGB', 'cmd'}; 'ok' is the verdict of 4.7 (exit code, ERRORs, the two warnings that lose a command)"""
+def kill_tree(pid):
+    subprocess.run(['taskkill', '/T', '/F', '/PID', str(pid)], capture_output=True)
+
+
+def run(rundir, inp, job, timeout=3600, cpus=1, out='output.out', say=print, watch=None):
+    """start MAPDL on <rundir>/<inp> -> {'rc', 'timedOut', 'how', 'seconds', 'ok', 'errors', 'warnings', 'lost', 'out',
+    'freeGB', 'cmd'}; 'ok' is the verdict of 4.7 (exit code, ERRORs, the two warnings that lose a command).
+    timeout 0/None: no wall-clock limit.  watch(p) -> (exit code, how): follows the run instead of a plain wait
+    (progress lines, stall alarms); how is '', 'timeout' or 'stalled'."""
     free = wait_for_memory(say)
     cpus = max(1, int(cpus or 1))
     cmd = [MAPDL, '-b', '-s', 'noread', '-np', str(cpus)] + (['-smp'] if cpus > 1 else []) + \
           ['-i', inp, '-o', out, '-dir', rundir, '-j', job]
     t0 = time.time()
     timed_out = False
+    how = ''
     with open(os.path.join(rundir, 'launcher.log'), 'wb') as lf:
         p = subprocess.Popen(cmd, cwd=rundir, env=env(), stdout=lf, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL)
-        try:
-            rc = p.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            subprocess.run(['taskkill', '/T', '/F', '/PID', str(p.pid)], capture_output=True)
-            timed_out = True
-            rc = None
+        if watch:
+            rc, how = watch(p)
+            timed_out = how == 'timeout'
+        else:
+            try:
+                rc = p.wait(timeout=timeout or None)
+            except subprocess.TimeoutExpired:
+                kill_tree(p.pid)
+                timed_out = True
+                how = 'timeout'
+                rc = None
     text = read(os.path.join(rundir, out))
     err = read(os.path.join(rundir, job + '.err'))
     errors = messages(text, '*** ERROR ***')
@@ -170,10 +183,10 @@ def run(rundir, inp, job, timeout=3600, cpus=1, out='output.out', say=print):
         if m not in errors:
             errors.append(m)
     lost = [why for rx, why in LOST if rx.search(text)]
-    res = {'rc': rc, 'timedOut': timed_out, 'seconds': round(time.time() - t0, 1), 'errors': errors,
+    res = {'rc': rc, 'timedOut': timed_out, 'how': how, 'seconds': round(time.time() - t0, 1), 'errors': errors,
            'warnings': messages(text, '*** WARNING ***', 20), 'lost': lost, 'out': text, 'freeGB': free,
            'cmd': cmd}
-    res['ok'] = rc == 0 and not timed_out and not errors and not lost
+    res['ok'] = rc == 0 and not timed_out and not how and not errors and not lost
     return res
 
 

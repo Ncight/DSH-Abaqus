@@ -64,6 +64,8 @@
   #rvState { padding: 2px 8px; border-radius: 3px; color: #fff; font-weight: bold; background: #808080; white-space: nowrap; }
   #rvState.approved { background: #2e8b2e; } #rvState.rejected { background: #c00000; } #rvState.stale { background: #d07000; }
   #rvApprove { color: #1d6b1d; font-weight: bold; } #rvReject { color: #a00000; font-weight: bold; }
+  .dfl { font: 12px Consolas, monospace; white-space: pre; overflow-x: auto; max-height: 260px; margin: 4px 0; padding: 4px; background: #f6f6f6; border: 1px solid #ddd; }
+  .dfl .r { color: #b00000; } .dfl .a { color: #106010; }
   #rvBar .btn:disabled { color: #999; cursor: default; background: #ececec; border-color: #ccc; }
   #rvInfo { color: #555; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 1 1 60px; }
   #rvPanel { position: absolute; z-index: 12; left: 0; right: 0; top: 0; max-height: 62%; overflow: auto; background: #fbfbfb; border-bottom: 2px solid #000080;
@@ -158,11 +160,12 @@
   <div id="vpWrap">
     <div id="vpTitle">Viewport: 1</div>
     <div id="rvBar">
-      <span id="rvState">未审查</span>
       <button id="rvApprove" class="btn" disabled>批准求解</button>
       <button id="rvReject" class="btn" disabled>退回修改</button>
       <button id="rvToggle" class="btn" title="总体意见与逐项标注">标注 <b id="rvCount">0</b> ▾</button>
       <button id="rvCopy" class="btn" title="把审查意见单 (与 .md 文件相同的文字) 复制到剪贴板">复制修改指令</button>
+      <button id="rvDiff" class="btn" title="和上次批准的版本、或同一文件夹里最近批准的文件逐行比较">对比已批准</button>
+      <span id="rvState">未审查</span>
       <span id="rvInfo"></span>
     </div>
     <div id="vp">
@@ -1077,6 +1080,31 @@ async function postReview(status, dryRun, from) {
   return api('/api/review', { method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ path: s.path, status, note: src.note, comments: src.comments, dryRun: !!dryRun, root: s.root }) });
 }
+async function fetchDiff() {     // -> the /api/diff answer ({diff} ; MAPDL: {diff, solve, mapdl}) or undefined
+  try { return await api('/api/diff?' + fileQuery(curKey)); } catch (e) { return undefined; }
+}
+function diffAnswerHtml(r) {
+  if (r === undefined) return '<p>（对比失败）</p>';
+  if (!r.mapdl) return diffHtml(r.diff);
+  if (!r.diff && !r.solve) return diffHtml(null);
+  return '<p><b>模型（CDB）</b></p>' + diffHtml(r.diff, '（没有可对比的已批准 CDB）') +
+    '<p><b>求解段</b></p>' + diffHtml(r.solve, '（没有可对比的已批准求解段）');
+}
+function diffHtml(d, none) {
+  if (d === undefined) return '<p>（对比失败）</p>';
+  if (!d) return none ? `<p>${none}</p>` : '<p>没有可对比的已批准版本：这是这个模型第一次审查，请完整检查几何、边界、载荷和接触。</p>';
+  const when = esc((d.decidedAt || '').replace('T', ' '));
+  if (d.same) return `<p>与${esc(d.base)}（${when}）<b>内容完全相同</b>。</p>`;
+  const NL = '\n';
+  const more = (d.n_removed > d.removed.length || d.n_added > d.added.length) ? NL + '… 差异较多，只列出前面一部分' : '';
+  return `<p>与${esc(d.base)}（${when}）相比，从第 ${d.line} 行起有 <b>${d.n_removed}</b> 行被替换为 <b>${d.n_added}</b> 行：</p>` +
+    `<div class="dfl">${d.removed.map(x => `<span class="r">- ${esc(x)}</span>`).join(NL)}${d.removed.length && d.added.length ? NL : ''}` +
+    `${d.added.map(x => `<span class="a">+ ${esc(x)}</span>`).join(NL)}${more}</div>`;
+}
+async function showDiff() {
+  if (!curKey) return;
+  await modal('与已批准版本对比', diffAnswerHtml(await fetchDiff()), '关闭', { noCancel: true });
+}
 async function decide(status) {
   if (!M) return;
   if (status === 'approved') {
@@ -1087,7 +1115,10 @@ async function decide(status) {
         `<label><input type="checkbox" data-need> 我已知悉上述问题, 仍然批准求解</label>`, '仍然批准');
       if (!ok) return;
     }
-    if (pending.length && !(await modal('批准求解', `还有 ${pending.length} 条标注未处理。批准后它们会一并写入审查记录, 但 Agent 不会再修改模型。`, '批准'))) return;
+    const d = await fetchDiff();
+    const ok2 = await modal('确认批准求解', `<p>批准 <b>${esc(labelOf(curKey))}</b> 后，Agent 就可以提交这份文件求解。</p>` + diffAnswerHtml(d) +
+      (pending.length ? `<p>还有 ${pending.length} 条标注未处理。批准后它们会一并写入审查记录, 但 Agent 不会再修改模型。</p>` : ''), '确认批准');
+    if (!ok2) return;
   } else if (!pending.length && !$('rvNote').value.trim()) {
     await modal('退回修改', '请至少写一条标注或总体意见, 说明要改什么。', '好', { noCancel: true });
     $('rvPanel').classList.add('open'); $('rvNote').focus();
@@ -1127,6 +1158,7 @@ $('rvApprove').onclick = () => decide('approved');
 $('rvReject').onclick = () => decide('rejected');
 $('rvToggle').onclick = () => $('rvPanel').classList.toggle('open');
 $('rvCopy').onclick = copyInstructions;
+$('rvDiff').onclick = showDiff;
 $('rvNote').oninput = savePending;
 
 // ---------------------------------------------------------------- loading / watching

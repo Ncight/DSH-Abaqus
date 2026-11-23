@@ -40,6 +40,7 @@ PROJECT = os.path.dirname(TOOLS)
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(TOOLS, 'preview'))
 import abq_diag as diag  # noqa: E402
+import resources as res  # noqa: E402
 
 ABAQUS = os.environ.get('ABAQUS_BAT', r'D:\SIMULIA\Commands\abaqus.bat')
 SAMPLES_ZIP = os.environ.get('ABQ_SAMPLES_ZIP',
@@ -165,8 +166,10 @@ def wait_for_memory():
         time.sleep(10)
 
 
-def run_abaqus(args, cwd, log_path, timeout, env=None):
-    """run abaqus with output to a file (no pipes: works inside restricted sandboxes) -> (code, timed_out, sec, log)"""
+def run_abaqus(args, cwd, log_path, timeout, env=None, watch=None, info=None):
+    """run abaqus with output to a file (no pipes: works inside restricted sandboxes) -> (code, timed_out, sec, log)
+    timeout 0/None: no wall-clock limit.  watch=(job, inp, stall_min): follow the .sta while waiting (progress lines,
+    stall alarms, stop on the second alarm); info (dict) receives 'how' = '' | 'timeout' | 'stalled'."""
     wait_for_memory()
     flags = 0x00004000 if os.environ.get('ABQ_LOW_PRIORITY') else 0      # BELOW_NORMAL_PRIORITY_CLASS
     t0 = time.time()
@@ -178,13 +181,39 @@ def run_abaqus(args, cwd, log_path, timeout, env=None):
     with open(log_path, 'wb') as lf:
         p = subprocess.Popen(['cmd.exe', '/d', '/c', ABAQUS] + list(args), cwd=cwd, stdout=lf,
                              stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, env=full_env, creationflags=flags)
-        try:
-            code = p.wait(timeout=timeout)
-        except subprocess.TimeoutExpired:
-            kill_tree(p.pid)
-            timed_out = True
-            code = None
+        how = ''
+        if watch:
+            job_, inp_, stall_ = watch[:3]
+            code, how = res.watch(p, cwd, job_, inp_, kill_tree, timeout=timeout or 0, stall_min=stall_,
+                                  echo=lambda *x, **k: print(*x, flush=True),
+                                  names=watch[3] if len(watch) > 3 else None)
+            timed_out = how == 'timeout'
+        else:
+            try:
+                code = p.wait(timeout=timeout or None)
+            except subprocess.TimeoutExpired:
+                kill_tree(p.pid)
+                timed_out = True
+                how = 'timeout'
+                code = None
+        if info is not None:
+            info['how'] = how
     return code, timed_out, time.time() - t0, diag.read_text(log_path)
+
+
+def restart_read_step(inp):
+    """the STEP= of *RESTART, READ (0 when READ has no STEP=), None when the input is not a restart"""
+    try:
+        with open(inp, 'rb') as f:
+            for raw in f:
+                if raw[:8].lower() == b'*restart':
+                    low = raw.strip().lower().replace(b' ', b'')
+                    if b'read' in low.split(b','):
+                        m = re.search(rb'step=(\d+)', low)
+                        return int(m.group(1)) if m else 0
+    except OSError:
+        pass
+    return None
 
 
 def memory_arg(requested=None):
@@ -199,13 +228,25 @@ def memory_arg(requested=None):
     return 'memory=%d' % int(gb * 1024)
 
 
-def run_solver(args, cwd, log_path, timeout):
+def run_solver(args, cwd, log_path, timeout, watch=None, info=None):
     """run_abaqus for analysis jobs, retrying once when the failure was only a transient lack of memory"""
-    res = run_abaqus(args, cwd, log_path, timeout)
-    if re.search(r'failed to obtain memory|unable to allocate', res[3], re.I) and not res[1]:
+    out = run_abaqus(args, cwd, log_path, timeout, watch=watch, info=info)
+    if re.search(r'failed to obtain memory|unable to allocate', out[3], re.I) and not out[1] and \
+            not (info or {}).get('how'):
         time.sleep(30)
-        res = run_abaqus(args, cwd, log_path, timeout)
-    return res
+        out = run_abaqus(args, cwd, log_path, timeout, watch=watch, info=info)
+    return out
+
+
+def parse_memory_mb(text):
+    """'12gb' / '12 GB' / '16000' (MB) / '16000mb' -> MB (int) or None"""
+    if not text:
+        return None
+    m = re.match(r'^\s*([0-9.]+)\s*(gb|g|mb|m)?\s*$', str(text), re.I)
+    if not m:
+        return None
+    v = float(m.group(1))
+    return int(v * 1024) if (m.group(2) or '').lower() in ('gb', 'g') else int(v)
 
 
 def preview_alive():
@@ -300,6 +341,15 @@ def gate_check(inp):
         lines.append('该 INP 在上次审查（%s）之后有改动，需要重新审查。' % ent.get('status'))
     else:
         lines.append('该 INP 还没有被审查过。')
+    if not (ent and ent.get('status') == 'rejected' and current):
+        try:
+            import review_diff
+            with open(os.path.join(root, '.abq', 'review.json'), encoding='utf-8') as f:
+                files = json.load(f).get('files', {})
+            rel = os.path.relpath(os.path.abspath(inp), root).replace(os.sep, '/')
+            lines.extend(review_diff.text(review_diff.compare(root, rel, inp, files, show=12)))
+        except Exception:
+            pass
     lines.append('请用户在预览面板里检查几何、边界、载荷、接触后点「批准求解」或「退回修改」: http://127.0.0.1:%d/' % PREVIEW_PORT)
     lines.append('此时应停下来向用户说明模型要点并等待审查结论；不要绕过闸门直接调用 abaqus。数据检查 (abq datacheck) 不受闸门限制。')
     return False, lines
@@ -635,6 +685,9 @@ def cmd_datacheck(a):
         return 2
     if not precheck(inp, a.force):
         return 1
+    note = res.clean_stale_lock(cwd, job)
+    if note:
+        P(note)
     log = os.path.join(cwd, job + '.abqlog')
     dargs = ['job=' + job, 'datacheck', 'interactive', 'ask_delete=OFF']
     if memory_arg():
@@ -684,35 +737,97 @@ def cmd_run(a):
     if not os.path.isfile(inp):
         P('找不到 %s （先用脚本 writeInput 导出 INP，或给出正确的作业名）' % inp)
         return 2
-    if not precheck(inp, a.force):
+    restart_step = restart_read_step(inp)
+    old = None
+    size_job, size_inp = job, inp                       # what the resource plan is sized from
+    names = res.step_names(inp)
+    if restart_step is not None and not a.oldjob:
+        P('这是重启分析（INP 里有 *RESTART, READ），要用 --oldjob <基础作业名> 指定从哪个已经算过的作业接着算。')
+        return 2
+    if a.oldjob:
+        old = a.oldjob[:-4] if a.oldjob.lower().endswith('.inp') else a.oldjob
+        old_inp = os.path.join(cwd, old + '.inp')
+        missing = [ext for ext in ('.res', '.mdl', '.stt', '.prt', '.odb') if not os.path.isfile(os.path.join(cwd, old + ext))]
+        if missing:
+            P('基础作业 %s 缺少重启所需的文件 %s。基础作业的 INP 要带 *Restart, write，并且已经算过。' % (old, ', '.join(missing)))
+            return 2
+        if restart_step is None:
+            P('提示：给了 --oldjob，但 %s.inp 里没有 *RESTART, READ，Abaqus 不会从基础作业接着算。' % job)
+        if not os.path.isfile(old_inp):
+            P('找不到基础作业的输入 %s' % old_inp)
+            return 2
+        ok_old, old_lines = gate_check(old_inp)
+        if not ok_old:
+            P('⛔ 基础作业 %s 的输入现在不是已批准的那一份，不能从它重启：' % old, *old_lines)
+            return 3
+        size_job, size_inp = old, old_inp
+        names = res.step_names(old_inp)[:restart_step or None] + names
+        P('重启分析：从基础作业 %s 的%s接着算（静态体检和资源估算按基础作业的模型）。' % (
+            old, '第 %d 步结束处' % restart_step if restart_step else '最后一个重启点'))
+    elif not precheck(inp, a.force):
         return 1
     allowed, lines = gate_check(inp)
     P(*lines)
     if not allowed:
         return 3
+    note = res.clean_stale_lock(cwd, job)
+    if note:
+        P(note)
+    root = workspace_root(cwd)
+    nodes = node_count(size_inp)
+    if nodes is None:
+        nodes = int(os.path.getsize(size_inp) / 100)     # rough: about 100 bytes of INP per node
+    small = 0 if getattr(a, 'force_cpus', False) else SMALL_MODEL_NODES
+    req_mem = parse_memory_mb(a.memory)
+    if a.memory and req_mem is None:
+        P('--memory 的格式是 12gb 或 16000（MB）: %s' % a.memory)
+        return 2
+    if getattr(a, 'plan', False):
+        pl = res.plan_job(root, cwd, job, inp, nodes, small, a.cpus or 0, req_mem, est=(size_job, size_inp))
+        P(*pl['lines'])
+        if not pl['ok']:
+            P('现在启动的话要排队：%s' % pl['wait'])
+        return 0
+    pl = res.acquire(root, cwd, job, inp, nodes, small, a.cpus or 0, req_mem, max_wait_min=a.queue_max,
+                     echo=lambda *x, **k: print(*x, flush=True), est=(size_job, size_inp))
+    P(*pl['lines'])
+    if not pl['ok']:
+        return 4
+    a.cpus = pl['cpus']
     args = ['job=' + job, 'interactive', 'ask_delete=OFF']
-    a.cpus, cpu_note = effective_cpus(a.cpus, inp, getattr(a, 'force_cpus', False))
-    if cpu_note:
-        P(cpu_note)
-    if a.cpus and a.cpus > 1:
+    if old:
+        args.append('oldjob=' + old)
+    if a.cpus > 1:
         args.append('cpus=%d' % a.cpus)
     if a.user:
         args.append('user=' + a.user)
     if a.double:
         args.append('double=both')
-    mem = memory_arg(a.memory)
-    if mem:
-        args.append(mem)
+    args.append('memory=%d' % pl['mem_mb'])
     log = os.path.join(cwd, job + '.abqlog')
-    code, to, sec, text = run_solver(args, cwd, log, a.timeout)
+    P(('不设墙钟上限' if not a.timeout else '墙钟上限 %d 秒' % a.timeout) +
+      '；进度看门狗：%s 分钟（或平均每增量用时的 5 倍）没有新增量就报警，连续 2 次报警停止作业。' % res._g(a.stall_min))
+    info = {}
+    try:
+        code, to, sec, text = run_solver(args, cwd, log, a.timeout, watch=(job, inp, a.stall_min, names), info=info)
+    finally:
+        res.release(root, os.path.join(cwd, job))
     job_text_to_utf8(cwd, job)
     write_runinfo(cwd, job)
     d = diag.diagnose(cwd, job, text)
-    state = '超时已终止 (%d s)，可加大 --timeout 或改用后台运行' % a.timeout if to else \
+    stalled = info.get('how') == 'stalled'
+    state = '超时已终止 (%d s)，要更长就加大 --timeout，或去掉它（默认不限时）' % a.timeout if to else \
+        '卡住已停止（连续两次进度报警）' if stalled else \
         '完成 ✓' if d['state'] == 'completed' else '失败 ✗'
+    rows = res.sta_rows(os.path.join(cwd, job + '.sta'))
+    res.log_perf(root, {'time': time.strftime('%Y-%m-%d %H:%M:%S'), 'job': job, 'nodes': nodes,
+                        'equations': pl['need']['equations'], 'cpus': a.cpus, 'mem_mb': pl['mem_mb'],
+                        'wall_s': round(sec, 1), 'increments': len(rows),
+                        'iterations': sum(r['iters'] for r in rows), 'state': 'stalled' if stalled else
+                        'timeout' if to else d['state'], 'flops_per_iter': pl['need'].get('flops')})
     P('作业 %s — %s (用时 %s s%s)' % (job, state, fnum(sec, 3), ', cpus=%d' % a.cpus if a.cpus > 1 else ''))
     print_diag(d)
-    if d['state'] == 'completed' and not to:
+    if d['state'] == 'completed' and not to and not stalled:
         if a.no_post:
             P('下一步: abq odb %s.odb （结果摘要）→ abq verify %s （收工前核查）' % (job, job))
             return 0
@@ -741,6 +856,23 @@ def cmd_status(a):
     print_diag(d)
     if d['sta']['tail']:
         P('.sta 末尾:', *['  ' + l for l in d['sta']['tail'][-6:]])
+    root = workspace_root(cwd)
+    mine = [r for r in res.running_jobs(root) if r.get('path') == os.path.join(cwd, job)]
+    if mine:
+        r = mine[0]
+        rows = res.sta_rows(os.path.join(cwd, job + '.sta'))
+        el = time.time() - r.get('started', time.time())
+        P('运行资源: %d 核、内存 %s GB，已运行 %s；完成 %d 个增量%s。' % (
+            r.get('cpus', 1), res._g(r.get('mem_mb', 0) / 1024.0), res._mins(el), len(rows),
+            ('，最近一个增量在 %s 前' % res._mins(time.time() - os.path.getmtime(os.path.join(cwd, job + '.sta'))))
+            if rows else ''))
+    others = [r for r in res.running_jobs(root) if r.get('path') != os.path.join(cwd, job)]
+    if others:
+        P('同时在运行: ' + ', '.join('%s(%d 核)' % (r['job'], r.get('cpus', 1)) for r in others))
+    queue = [r for r in res.queued_jobs(root) if r.get('queued', 0) < time.time()]   # (placeholders are dated ahead)
+    if queue:
+        P('排队中（按提交顺序）: ' + ', '.join('%s(已等 %s)' % (r['job'], res._mins(time.time() - r.get('queued', time.time())))
+                                         for r in queue))
     return 0 if d['state'] in ('completed', 'running', 'checked') else 1
 
 
@@ -1284,17 +1416,27 @@ def cmd_sweep(a):
         inp = os.path.join(cwd, job + '.inp')
         if os.path.isfile(inp):
             os.remove(inp)
-        code, to, sec, text = run_abaqus(['cae', 'noGUI=' + name], cwd, os.path.join(cwd, job + '.cae.log'), a.timeout,
-                                         env={'ABQ_PARAMS': json.dumps(params)})
+        code, to, sec, text = run_abaqus(['cae', 'noGUI=' + name], cwd, os.path.join(cwd, job + '.cae.log'),
+                                         a.timeout or 1800, env={'ABQ_PARAMS': json.dumps(params)})
         if not os.path.isfile(inp):
             tail = [l for l in text.splitlines() if l.strip() and 'icense' not in l][-4:]
             rows.append((label, job, '脚本失败', [], ' | '.join(tail)[:300] or '没有生成 %s.inp（脚本是否用 PARAMS["JOB"] 作为作业名？）' % job))
             continue
-        ncpu = effective_cpus(a.cpus, inp)[0]
-        args = ['job=' + job, 'interactive', 'ask_delete=OFF'] + (['cpus=%d' % ncpu] if ncpu > 1 else [])
-        if memory_arg():
-            args.append(memory_arg())
-        code, to, sec, text = run_solver(args, cwd, os.path.join(cwd, job + '.abqlog'), a.timeout)
+        nodes = node_count(inp)
+        pl = res.acquire(root, cwd, job, inp, nodes if nodes is not None else int(os.path.getsize(inp) / 100),
+                         SMALL_MODEL_NODES, a.cpus or 0, None, echo=lambda *x, **k: print(*x, flush=True))
+        if not pl['ok']:
+            rows.append((label, job, '没有启动', [], pl['wait']))
+            continue
+        P('[%s] %s' % (job, pl['lines'][-1]))
+        args = ['job=' + job, 'interactive', 'ask_delete=OFF', 'memory=%d' % pl['mem_mb']] + \
+            (['cpus=%d' % pl['cpus']] if pl['cpus'] > 1 else [])
+        info = {}
+        try:
+            code, to, sec, text = run_solver(args, cwd, os.path.join(cwd, job + '.abqlog'), a.timeout,
+                                             watch=(job, inp, 15.0), info=info)
+        finally:
+            res.release(root, os.path.join(cwd, job))
         to_utf8(inp, comments_only=True)
         job_text_to_utf8(cwd, job)
         d = diag.diagnose(cwd, job, text)
@@ -1893,12 +2035,19 @@ def main(argv=None):
 
     s = sub.add_parser('run', help='完整求解')
     s.add_argument('job')
-    s.add_argument('--cpus', type=int, default=1, help='核数；少于 20000 个节点的模型自动用 1 核（多核反而慢）')
+    s.add_argument('--cpus', type=int, default=0, help='核数。默认 0 = 按本机此刻的空闲物理核和模型规模自动定；'
+                                                         '给数字则按它用（仍不超过空闲核）')
     s.add_argument('--force-cpus', action='store_true', help='小模型也按 --cpus 给的核数运行')
-    s.add_argument('--timeout', type=int, default=3600)
+    s.add_argument('--timeout', type=int, default=0, help='墙钟上限（秒）。默认 0 = 不限时，由进度看门狗判断卡住')
+    s.add_argument('--stall-min', type=float, default=15.0,
+                   help='进度看门狗：多少分钟（或平均每增量用时的 5 倍，取大者）没有新增量就报警，连续 2 次报警停止作业')
+    s.add_argument('--queue-max', type=int, default=0, help='资源不够时最多排队多少分钟（默认 0 = 一直等）')
+    s.add_argument('--plan', action='store_true', help='只看资源分配决定，不求解')
+    s.add_argument('--oldjob', help='重启分析（INP 里有 *RESTART, READ）时，从哪个已经算过的基础作业接着算；'
+                                    '基础作业的 INP 要带 *Restart, write，并且也要已批准')
     s.add_argument('--user', help='用户子程序源文件')
     s.add_argument('--double', action='store_true', help='显式双精度')
-    s.add_argument('--memory', help='求解器内存上限，如 32gb 或 16000（MB）。默认按当前空闲内存自动取 1.5~8 GB，大模型需要显式加大')
+    s.add_argument('--memory', help='求解器内存，如 12gb 或 16000（MB）。默认按 Abaqus 估算的需求和本机此刻可用内存自动定')
     s.add_argument('--force', action='store_true', help='忽略静态体检的错误')
     s.add_argument('--no-post', action='store_true', help='求解后不自动给出结果摘要和核查')
     s.set_defaults(fn=cmd_run)
@@ -1932,8 +2081,8 @@ def main(argv=None):
     s.add_argument('--zip', action='store_true', help='多个参数按位置配对而不是全组合')
     s.add_argument('--prefix', help='变体作业名前缀（默认脚本名）')
     s.add_argument('--base', help='闸门开启时：已获批准的基准作业名')
-    s.add_argument('--cpus', type=int, default=1)
-    s.add_argument('--timeout', type=int, default=1800)
+    s.add_argument('--cpus', type=int, default=0, help='默认 0 = 每个变体按本机空闲核和模型规模自动定')
+    s.add_argument('--timeout', type=int, default=0, help='每个变体求解的墙钟上限（秒），默认 0 = 不限时，由进度看门狗判断卡住')
     s.add_argument('--max-runs', type=int, default=6)
     s.set_defaults(fn=cmd_sweep)
 

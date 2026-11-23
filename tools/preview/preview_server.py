@@ -24,6 +24,7 @@ Endpoints
     GET  /api/highlight?path=&kind=&name=
     GET  /api/symbols?path=&step=
     GET  /api/review?path=      stored review decision + whether it still matches the file
+    GET  /api/diff?path=        lines that differ from the last approved version (or the latest approved file in the folder)
     POST /api/review            {path, status: approved|rejected, note, comments[, dryRun][, root]}
 
 Review state lives in <workspace>/.abq/review.json and <workspace>/.abq/review/<base name>.md, in the
@@ -48,6 +49,7 @@ from urllib.parse import parse_qs, urlparse
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 import fingerprint  # noqa: E402
+import review_diff  # noqa: E402
 import inp_model  # noqa: E402
 import solvers  # noqa: E402
 
@@ -393,8 +395,24 @@ def save_review(body):
         write_atomic(os.path.join(abq_dir(wbase), 'review.json'), json.dumps(data, ensure_ascii=False, indent=1) + '\n',
                      wbase)
         write_atomic(md_path, md, wbase)
+    if status == 'approved':                      # what exactly was approved: later changes are listed against it
+        if solver == solvers.MAPDL:
+            review_diff.save_mapdl(wbase, rel, p, os.path.splitext(p)[0] + '.solve.dat')
+        else:
+            review_diff.save_copy(wbase, rel, p)
     res.update({'current': True, 'state': status})
     return res
+
+
+def review_diff_of(rel, root=None):
+    """what differs from the last approved version of this file, or from the most similar approved file next to it.
+    MAPDL: the CDB and the solve segment each ('diff' and 'solve')."""
+    p, solver, wbase = resolve(rel, root)
+    reviews = load_reviews(wbase)['files']
+    if solver == solvers.MAPDL:
+        d = review_diff.compare_mapdl(wbase, rel, p, os.path.splitext(p)[0] + '.solve.dat', reviews, show=40)
+        return {'path': rel, 'diff': d['cdb'], 'solve': d['solve'], 'mapdl': True}
+    return {'path': rel, 'diff': review_diff.compare(wbase, rel, p, reviews, show=40)}
 
 
 # ---------------------------------------------------------------- HTTP
@@ -479,6 +497,8 @@ class Handler(BaseHTTPRequestHandler):
                     return self._json(mdl.symbols(int(q.get('step', '-1'))))
             if u.path == '/api/review':
                 return self._json(review_state(q['path'], q.get('root')))
+            if u.path == '/api/diff':
+                return self._json(review_diff_of(q['path'], q.get('root')))
             if u.path == '/api/health':
                 info = {'ok': True, 'pid': os.getpid(), 'root': ROOT, 'maxAutoMB': limit_mb(),
                         'cached': [os.path.basename(k) for k in _cache]}

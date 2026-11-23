@@ -38,10 +38,15 @@ TOOLS = os.path.dirname(HERE)
 PROJECT = os.path.dirname(TOOLS)
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(TOOLS, 'preview'))
+sys.path.append(os.path.join(TOOLS, 'abq'))
 import fingerprint  # noqa: E402
 import mapdl_run  # noqa: E402
 import solve_segment  # noqa: E402
 import ans_post  # noqa: E402
+import resources as res  # noqa: E402  (cores, memory, queue and progress watch: shared with abq)
+import review_diff  # noqa: E402
+
+SMALL_MODEL_NODES = 20000           # as abq: below this one core is faster
 
 PREVIEW_PORT = int(os.environ.get('ABQ_PREVIEW_PORT', '8765'))
 SELF = 'ans'
@@ -205,12 +210,29 @@ def gate_check(paths):
         old = ent.get('parts') or {}
         changed = [w for k, w in (('cdb', 'CDB'), ('solve', '求解段')) if old.get(k) != (fp['parts'] or {}).get(k)]
         lines.append('上次审查（%s）之后%s改过了，需要重新审查。' % (ent.get('status'), '、'.join(changed) or '文件'))
+        lines += diff_lines(paths)
     else:
         lines.append('这份 CDB 和求解段还没有被审查过。')
+        lines += diff_lines(paths)
     lines.append('请用户在预览面板里检查网格、材料、组件、约束、载荷和每个载荷步后点「批准求解」或「退回修改」: http://127.0.0.1:%d/'
                  % PREVIEW_PORT)
     lines.append('此时应停下来向用户说明模型要点并等待审查结论；不要绕过闸门直接调用 MAPDL。ans check 不受闸门限制。')
     return False, lines
+
+
+def diff_lines(paths, show=12):
+    """what differs from the approved version (or the most similar approved job next to it): CDB and solve segment"""
+    try:
+        reviews = load_json(os.path.join(paths['root'], '.abq', 'review.json'), {}).get('files', {})
+        d = review_diff.compare_mapdl(paths['root'], rel(paths['root'], paths['cdb']), paths['cdb'], paths['solve'],
+                                      reviews, show=show)
+    except Exception:
+        return []
+    out = []
+    for what, x in (('CDB', d.get('cdb')), ('求解段', d.get('solve'))):
+        for i, line in enumerate(review_diff.text(x, show)):
+            out.append(('%s：' % what + line) if i == 0 else line)
+    return out
 
 
 def builds_path(root):
@@ -456,35 +478,71 @@ def cmd_run(a):
     P(*lines)
     if not ok:
         return 3
-    fp = fingerprint.fingerprint(paths['cdb'], fingerprint.MAPDL)
-    work = fresh_dir(os.path.join(paths['work'], 'run'))
-    shutil.copy2(paths['cdb'], os.path.join(work, job + '.cdb'))
-    shutil.copy2(paths['solve'], os.path.join(work, job + '.solve.dat'))
-    with open(paths['solve'], 'rb') as f:
-        seg_text = f.read().decode('latin-1')
-    with open(os.path.join(work, 'run_input.inp'), 'w', encoding='latin-1', newline='\n') as f:
-        f.write(mapdl_run.RUN_HEAD.format(job=job) + seg_text.rstrip('\n') + '\n' + mapdl_run.RUN_TAIL)
-    antypes = [s['antype'] for s in m.seg_steps]
-    run = {'job': job, 'fingerprint': fp['sha256'], 'parts': fp['parts'], 'startedAt': now(), 'cpus': a.cpus,
-           'loadSteps': len(m.seg_steps), 'antypes': antypes, 'components': m.cm_names}
-    save_json(os.path.join(work, 'run.json'), dict(run, state='running'))
-    P('MAPDL 求解: %d 个载荷步 (%s)，运行目录 %s' % (len(m.seg_steps), ', '.join(s['proc'] for s in m.seg_steps), work))
+    root = paths['root']
     try:
-        r = mapdl_run.run(work, 'run_input.inp', job, timeout=a.timeout, cpus=a.cpus, say=P)
-    except mapdl_run.LowMemory as e:
-        save_json(os.path.join(work, 'run.json'), dict(run, state='not started', why=str(e)))
-        P(str(e))
+        nodes = m.view(geom=False)['stats']['nodes']
+    except Exception:
+        nodes = int(os.path.getsize(paths['cdb']) / 150)          # rough: about 150 bytes of CDB per node
+    small = 0 if a.cpus else SMALL_MODEL_NODES
+    if a.plan:
+        pl = res.plan_job(root, paths['dir'], job, paths['cdb'], nodes, small, a.cpus or 0, None, solver='mapdl')
+        P(*pl['lines'])
+        if not pl['ok']:
+            P('现在启动的话要排队：%s' % pl['wait'])
+        return 0
+    # in line first: the previous run directory stays as it is while this job waits
+    pl = res.acquire(root, paths['dir'], job, paths['cdb'], nodes, small, a.cpus or 0, None, max_wait_min=a.queue_max,
+                     echo=lambda *x, **k: print(*x, flush=True), solver='mapdl')
+    P(*pl['lines'])
+    if not pl['ok']:
         return 4
+    try:
+        fp = fingerprint.fingerprint(paths['cdb'], fingerprint.MAPDL)
+        work = fresh_dir(os.path.join(paths['work'], 'run'))
+        shutil.copy2(paths['cdb'], os.path.join(work, job + '.cdb'))
+        shutil.copy2(paths['solve'], os.path.join(work, job + '.solve.dat'))
+        with open(paths['solve'], 'rb') as f:
+            seg_text = f.read().decode('latin-1')
+        with open(os.path.join(work, 'run_input.inp'), 'w', encoding='latin-1', newline='\n') as f:
+            f.write(mapdl_run.RUN_HEAD.format(job=job) + seg_text.rstrip('\n') + '\n' + mapdl_run.RUN_TAIL)
+        antypes = [s['antype'] for s in m.seg_steps]
+        names = [s['proc'] for s in m.seg_steps]
+        run = {'job': job, 'fingerprint': fp['sha256'], 'parts': fp['parts'], 'startedAt': now(), 'cpus': pl['cpus'],
+               'loadSteps': len(m.seg_steps), 'antypes': antypes, 'components': m.cm_names}
+        save_json(os.path.join(work, 'run.json'), dict(run, state='running'))
+        P('MAPDL 求解: %d 个载荷步 (%s)，运行目录 %s' % (len(m.seg_steps), ', '.join(names), work),
+          ('不设墙钟上限' if not a.timeout else '墙钟上限 %d 秒' % a.timeout) +
+          '；进度看门狗：%s 分钟（或平均每个子步用时的 5 倍；第一个子步之前按输出文件有没有变化、至少 30 分钟）'
+          '没有新子步就报警，连续 2 次报警停止作业。' % res._g(a.stall_min))
+        try:
+            r = mapdl_run.run(work, 'run_input.inp', job, timeout=a.timeout, cpus=pl['cpus'], say=P,
+                              watch=lambda p: res.watch(p, work, job, None, mapdl_run.kill_tree, timeout=a.timeout,
+                                                        stall_min=a.stall_min, names=names, kind='mapdl',
+                                                        echo=lambda *x, **k: print(*x, flush=True)))
+        except mapdl_run.LowMemory as e:
+            save_json(os.path.join(work, 'run.json'), dict(run, state='not started', why=str(e)))
+            P(str(e))
+            return 4
+    finally:
+        res.release(root, os.path.join(paths['dir'], job))
     nls = mapdl_run.solve_count(r['out'])
     rst = next((os.path.join(work, job + x) for x in ('.rst', '.rth', '.rmg') if os.path.isfile(os.path.join(work, job + x))), None)
     ok = r['ok'] and rst is not None
-    run.update(endedAt=now(), seconds=r['seconds'], rc=r['rc'], timedOut=r['timedOut'], errors=r['errors'][:10],
-               warnings=r['warnings'][:20], lost=r['lost'], loadStepsStarted=nls, rst=os.path.basename(rst) if rst else None,
-               state='done' if ok else 'failed')
+    stalled = r.get('how') == 'stalled'
+    rows = res.mntr_rows(os.path.join(work, job + '.mntr'))
+    run.update(endedAt=now(), seconds=r['seconds'], rc=r['rc'], timedOut=r['timedOut'], stalled=stalled,
+               errors=r['errors'][:10], warnings=r['warnings'][:20], lost=r['lost'], loadStepsStarted=nls,
+               rst=os.path.basename(rst) if rst else None, state='done' if ok else 'failed')
     save_json(os.path.join(work, 'run.json'), run)
+    res.log_perf(root, {'time': time.strftime('%Y-%m-%d %H:%M:%S'), 'solver': 'mapdl', 'job': job, 'nodes': nodes,
+                        'equations': pl['need']['equations'], 'cpus': pl['cpus'], 'mem_mb': pl['mem_mb'],
+                        'wall_s': r['seconds'], 'substeps': len(rows),
+                        'iterations': rows[-1]['total_iters'] if rows else None,
+                        'state': 'stalled' if stalled else 'timeout' if r['timedOut'] else ('done' if ok else 'failed')})
     if not ok:
         P('✗ 求解失败（%.1f s，退出码 %s%s；开始了 %d / %d 个载荷步）。' % (
-            r['seconds'], r['rc'], '，超时' if r['timedOut'] else '', nls, len(m.seg_steps)))
+            r['seconds'], r['rc'], '，超时' if r['timedOut'] else '，卡住已停止（连续两次进度报警）' if stalled else '',
+            nls, len(m.seg_steps)))
         for e in r['errors'][:8]:
             P('  ERROR: ' + e)
         for w in r['lost']:
@@ -772,6 +830,22 @@ def cmd_status(a):
             L.append('  MAPDL 还在算' if os.path.isfile(lock) else '  记录是「进行中」，但没有锁文件：上次可能被中断了')
     else:
         L.append('  还没有求解过')
+    root = paths['root']
+    me = os.path.join(paths['dir'], paths['job'])
+    mine = [r for r in res.running_jobs(root) if r.get('path') == me]
+    if mine:
+        rows = res.mntr_rows(os.path.join(paths['work'], 'run', paths['job'] + '.mntr'))
+        L.append('  运行资源: %d 核，已运行 %s；完成 %d 个子步%s' % (
+            mine[0].get('cpus', 1), res._mins(time.time() - mine[0].get('started', time.time())), len(rows),
+            '（第 %d 个载荷步第 %d 个子步，累计时间 %g）' % (rows[-1]['step'], rows[-1]['inc'], rows[-1]['total_time'])
+            if rows else ''))
+    others = [r for r in res.running_jobs(root) if r.get('path') != me]
+    if others:
+        L.append('  同时在运行: ' + ', '.join('%s(%d 核)' % (r.get('job', '?'), r.get('cpus', 1)) for r in others))
+    queue = [r for r in res.queued_jobs(root) if r.get('queued', 0) < time.time()]
+    if queue:
+        L.append('  排队中（按提交顺序）: ' + ', '.join('%s(已等 %s)' % (r.get('job', '?'), res._mins(time.time() - r['queued']))
+                                             for r in queue))
     P(*L)
     return 0
 
@@ -837,10 +911,15 @@ def main(argv=None):
     s.add_argument('--worst', type=int, default=10)
     s = sub.add_parser('run', help='核对批准记录后求解')
     s.add_argument('job')
-    s.add_argument('--cpus', type=int, default=1, help='核数（共享内存并行 -smp）；小模型用 1 核')
+    s.add_argument('--cpus', type=int, default=0, help='核数（共享内存并行 -smp）。默认 0 = 按本机此刻的空闲物理核、'
+                                                         '模型规模和许可证上限（config.json 的 mapdl_max_cores）自动定')
     s.add_argument('--comp', action='append', help='结果摘要里另取这个组件上的合计，可多次')
     s.add_argument('--lin', action='append', metavar='[名字:]x1,y1,z1,x2,y2,z2', help=LIN_HELP)
-    s.add_argument('--timeout', type=int, default=7200)
+    s.add_argument('--timeout', type=int, default=0, help='墙钟上限（秒）。默认 0 = 不限时，由进度看门狗判断卡住')
+    s.add_argument('--stall-min', type=float, default=15.0,
+                   help='进度看门狗：多少分钟（或平均每个子步用时的 5 倍，取大者）没有新子步就报警，连续 2 次报警停止作业')
+    s.add_argument('--queue-max', type=int, default=0, help='资源不够时最多排队多少分钟（默认 0 = 一直等）')
+    s.add_argument('--plan', action='store_true', help='只看资源分配决定，不求解')
     s = sub.add_parser('rst', help='结果摘要')
     s.add_argument('job')
     s.add_argument('--comp', action='append', help='另取这个组件上的节点力合计、最大位移和应力极值，可多次')
